@@ -3,21 +3,25 @@ defmodule RfwFormats.Model do
   Defines data structures for Remote Flutter Widgets.
   """
 
-  @type missing :: :__missing__
-
-  @missing :__missing__
+  defmodule Missing do
+    @moduledoc """
+    Represents a missing value in the data structure.
+    """
+    defstruct []
+    @type t :: %__MODULE__{}
+  end
 
   @doc """
   Returns a missing value.
   """
-  @spec missing() :: missing()
-  def missing, do: @missing
+  @spec missing() :: Missing.t()
+  def missing, do: %Missing{}
 
   @doc """
   Checks if a value is considered missing.
   """
   @spec is_missing?(any()) :: boolean()
-  def is_missing?(value), do: value == @missing
+  def is_missing?(value), do: match?(%Missing{}, value)
 
   @type dynamic_map :: %{required(String.t()) => dynamic_value()}
   @type dynamic_list :: [dynamic_value()]
@@ -721,7 +725,82 @@ defmodule RfwFormats.Model do
     %BoundStateReference{depth: depth, parts: parts}
   end
 
+  defimpl String.Chars, for: LibraryName do
+    def to_string(%{parts: parts}), do: Enum.join(parts, ".")
+  end
+
   defimpl String.Chars, for: Missing do
     def to_string(_), do: "<missing>"
+  end
+
+  defimpl String.Chars, for: Loop do
+    def to_string(%{input: input, output: output}), do: "...for loop in #{input}: #{output}"
+  end
+
+  defimpl String.Chars, for: Switch do
+    def to_string(%{input: input, outputs: outputs}), do: "switch #{input} #{inspect(outputs)}"
+  end
+
+  defimpl String.Chars, for: ConstructorCall do
+    def to_string(%{name: name, arguments: args}), do: "#{name}(#{inspect(args)})"
+  end
+
+  defimpl String.Chars, for: ArgsReference do
+    def to_string(%{parts: parts}), do: "args.#{Enum.join(parts, ".")}"
+  end
+
+  defimpl String.Chars, for: BoundArgsReference do
+    def to_string(%{arguments: args, parts: parts}),
+      do: "args(#{inspect(args)}).#{Enum.join(parts, ".")}"
+  end
+
+  defimpl String.Chars, for: DataReference do
+    def to_string(%{parts: parts}), do: "data.#{Enum.join(parts, ".")}"
+  end
+
+  defimpl String.Chars, for: LoopReference do
+    def to_string(%{loop: loop, parts: parts}), do: "loop#{loop}.#{Enum.join(parts, ".")}"
+  end
+
+  defimpl String.Chars, for: BoundLoopReference do
+    def to_string(%{value: value, parts: parts}),
+      do: "loop(#{inspect(value)}).#{Enum.join(parts, ".")}"
+  end
+
+  defimpl String.Chars, for: StateReference do
+    def to_string(%{parts: parts}), do: "state.#{Enum.join(parts, ".")}"
+  end
+
+  defimpl String.Chars, for: BoundStateReference do
+    def to_string(%{depth: depth, parts: parts}), do: "state^#{depth}.#{Enum.join(parts, ".")}"
+  end
+
+  defimpl String.Chars, for: EventHandler do
+    def to_string(%{event_name: name, event_arguments: args}),
+      do: "event #{name} #{inspect(args)}"
+  end
+
+  defimpl String.Chars, for: SetStateHandler do
+    def to_string(%{state_reference: ref, value: value}),
+      do: "set #{String.Chars.to_string(ref)} = #{inspect(value)}"
+  end
+
+  defimpl String.Chars, for: Import do
+    def to_string(%{name: name}), do: "import #{String.Chars.to_string(name)};"
+  end
+
+  defimpl String.Chars, for: WidgetDeclaration do
+    def to_string(%{name: name, initial_state: state, root: root}) do
+      initial_state = if state && state != %{}, do: " #{inspect(state)}", else: ""
+      "widget #{name}#{initial_state} = #{String.Chars.to_string(root)};"
+    end
+  end
+
+  defimpl String.Chars, for: RemoteWidgetLibrary do
+    def to_string(%{imports: imports, widgets: widgets}) do
+      imports_str = Enum.map(imports, &String.Chars.to_string/1) |> Enum.join("\n")
+      widgets_str = Enum.map(widgets, &String.Chars.to_string/1) |> Enum.join("\n")
+      "#{imports_str}\n#{widgets_str}"
+    end
   end
 end
