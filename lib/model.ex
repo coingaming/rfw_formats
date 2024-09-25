@@ -8,7 +8,7 @@ defmodule RfwFormats.Model do
     Represents a missing value in the data structure.
     """
     defstruct []
-    @type t :: %__MODULE__{}
+    @type t() :: %__MODULE__{}
   end
 
   @doc """
@@ -56,7 +56,7 @@ defmodule RfwFormats.Model do
     @moduledoc "Represents a location in a source file"
     defstruct [:source, :offset]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             source: any(),
             offset: integer()
           }
@@ -84,7 +84,7 @@ defmodule RfwFormats.Model do
     @moduledoc "Represents a range in a source file"
     defstruct [:start, :end]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             start: SourceLocation.t(),
             end: SourceLocation.t()
           }
@@ -106,10 +106,11 @@ defmodule RfwFormats.Model do
     @moduledoc """
     Represents the name of a widgets library in the RFW package.
     """
+    @derive {Inspect, only: [:parts]}
     @enforce_keys [:parts]
     defstruct [:parts]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             parts: [String.t()]
           }
 
@@ -131,19 +132,12 @@ defmodule RfwFormats.Model do
         true ->
           Enum.zip(parts1, parts2)
           |> Enum.reduce_while(:eq, fn {p1, p2}, _acc ->
-            case compare_strings(p1, p2) do
-              :eq -> {:cont, :eq}
-              other -> {:halt, other}
+            cond do
+              p1 == p2 -> {:cont, :eq}
+              String.to_charlist(p1) < String.to_charlist(p2) -> {:halt, :lt}
+              true -> {:halt, :gt}
             end
           end)
-      end
-    end
-
-    defp compare_strings(s1, s2) do
-      cond do
-        s1 == s2 -> :eq
-        String.to_charlist(s1) < String.to_charlist(s2) -> :lt
-        true -> :gt
       end
     end
   end
@@ -155,7 +149,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:library, :widget]
     defstruct [:library, :widget]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             library: LibraryName.t(),
             widget: String.t()
           }
@@ -167,21 +161,20 @@ defmodule RfwFormats.Model do
           widget: widget2
         }) do
       case LibraryName.compare(lib1, lib2) do
-        :eq -> compare_strings(widget1, widget2)
-        other -> other
+        :eq ->
+          cond do
+            widget1 == widget2 -> :eq
+            String.to_charlist(widget1) < String.to_charlist(widget2) -> :lt
+            true -> :gt
+          end
+
+        other ->
+          other
       end
     end
 
     def to_string(%__MODULE__{library: library, widget: widget}) do
       "#{LibraryName.to_string(library)}:#{widget}"
-    end
-
-    defp compare_strings(s1, s2) do
-      cond do
-        s1 == s2 -> :eq
-        String.to_charlist(s1) < String.to_charlist(s2) -> :lt
-        true -> :gt
-      end
     end
   end
 
@@ -192,7 +185,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:input, :output]
     defstruct [:input, :output, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             input: any(),
             output: any(),
             __source__: SourceRange.t() | nil
@@ -206,7 +199,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:input, :outputs]
     defstruct [:input, :outputs, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             input: any(),
             outputs: %{required(any()) => any()},
             __source__: SourceRange.t() | nil
@@ -220,7 +213,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:name, :arguments]
     defstruct [:name, :arguments, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             name: String.t(),
             arguments: RfwFormats.Model.dynamic_map(),
             __source__: SourceRange.t() | nil
@@ -234,7 +227,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:argument_name, :widget]
     defstruct [:argument_name, :widget, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             argument_name: String.t(),
             widget: RfwFormats.Model.blob_node(),
             __source__: SourceRange.t() | nil
@@ -255,7 +248,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:arguments, :parts]
     defstruct [:arguments, :parts, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             arguments: any(),
             parts: [any()],
             __source__: SourceRange.t() | nil
@@ -273,7 +266,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:parts]
     defstruct [:parts, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             parts: [any()],
             __source__: SourceRange.t() | nil
           }
@@ -298,7 +291,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:parts]
     defstruct [:parts, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             parts: [any()],
             __source__: SourceRange.t() | nil
           }
@@ -315,7 +308,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:argument_name, :parts]
     defstruct [:argument_name, :parts, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             argument_name: String.t(),
             parts: [any()],
             __source__: SourceRange.t() | nil
@@ -333,7 +326,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:value, :parts]
     defstruct [:value, :parts, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             value: any(),
             parts: [any()],
             __source__: SourceRange.t() | nil
@@ -351,7 +344,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:loop, :parts]
     defstruct [:loop, :parts, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             loop: integer(),
             parts: [any()],
             __source__: SourceRange.t() | nil
@@ -373,7 +366,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:depth, :parts]
     defstruct [:depth, :parts, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             depth: integer(),
             parts: [any()],
             __source__: SourceRange.t() | nil
@@ -391,7 +384,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:parts]
     defstruct [:parts, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             parts: [any()],
             __source__: SourceRange.t() | nil
           }
@@ -412,7 +405,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:event_name, :event_arguments]
     defstruct [:event_name, :event_arguments, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             event_name: String.t(),
             event_arguments: RfwFormats.Model.dynamic_map(),
             __source__: SourceRange.t() | nil
@@ -426,7 +419,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:state_reference, :value]
     defstruct [:state_reference, :value, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             state_reference: StateReference.t() | BoundStateReference.t(),
             value: any(),
             __source__: SourceRange.t() | nil
@@ -440,7 +433,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:name]
     defstruct [:name]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             name: LibraryName.t()
           }
   end
@@ -452,7 +445,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:name, :root]
     defstruct [:name, :initial_state, :root, :__source__]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             name: String.t(),
             initial_state: RfwFormats.Model.dynamic_map() | nil,
             root: ConstructorCall.t() | Switch.t(),
@@ -467,7 +460,7 @@ defmodule RfwFormats.Model do
     @enforce_keys [:imports, :widgets]
     defstruct [:imports, :widgets]
 
-    @type t :: %__MODULE__{
+    @type t() :: %__MODULE__{
             imports: [Import.t()],
             widgets: [WidgetDeclaration.t()]
           }
