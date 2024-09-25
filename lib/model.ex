@@ -185,14 +185,6 @@ defmodule RfwFormats.Model do
     end
   end
 
-  defmodule Missing do
-    @moduledoc """
-    Represents a missing value in the data structure.
-    """
-    defstruct []
-    @type t :: %__MODULE__{}
-  end
-
   defmodule Loop do
     @moduledoc """
     Represents a loop construct in Remote Flutter Widgets.
@@ -790,9 +782,8 @@ defmodule RfwFormats.Model do
   end
 
   defimpl String.Chars, for: WidgetDeclaration do
-    def to_string(%{name: name, initial_state: state, root: root}) do
-      initial_state = if state && state != %{}, do: " #{inspect(state)}", else: ""
-      "widget #{name}#{initial_state} = #{String.Chars.to_string(root)};"
+    def to_string(%{name: name, root: root}) do
+      "widget #{name} = #{String.Chars.to_string(root)};"
     end
   end
 
