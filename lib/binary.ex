@@ -195,11 +195,13 @@ defmodule RfwFormats.Binary.BlobEncoder do
   defp write_import_list(encoder, imports) do
     encoder
     |> write_int64(length(imports))
-    |> write_list(imports, fn %Import{name: %LibraryName{parts: parts}}, enc ->
-      enc
-      |> write_int64(length(parts))
-      |> write_list(parts, &write_string/2)
-    end)
+    |> write_list(imports, &write_import/2)
+  end
+
+  defp write_import(encoder, %Import{name: %LibraryName{parts: parts}}) do
+    encoder
+    |> write_int64(length(parts))
+    |> write_list(parts, &write_string/2)
   end
 
   defp write_declaration_list(encoder, widgets) do
@@ -209,24 +211,35 @@ defmodule RfwFormats.Binary.BlobEncoder do
   end
 
   defp write_declaration(
-         %WidgetDeclaration{
-           name: name,
-           initial_state: initial_state,
-           root: root
-         },
+         %WidgetDeclaration{name: name, initial_state: initial_state, root: root},
          encoder
        ) do
     encoder
     |> write_string(name)
-    |> write_value(initial_state || %{})
-    |> write_argument(root)
+    |> write_initial_state(initial_state)
+    |> write_root(root)
+  end
+
+  defp write_initial_state(encoder, nil) do
+    write_map(encoder, %{}, &write_argument/2)
+  end
+
+  defp write_initial_state(encoder, initial_state) when is_map(initial_state) do
+    write_map(encoder, initial_state, &write_argument/2)
+  end
+
+  defp write_root(encoder, %ConstructorCall{} = root) do
+    write_argument(encoder, root)
+  end
+
+  defp write_root(encoder, %Switch{} = root) do
+    write_argument(encoder, root)
   end
 
   defp write_argument(encoder, %ConstructorCall{name: name, arguments: arguments}) do
     encoder
     |> write_byte(@ms_widget)
     |> write_string(name)
-    |> write_int64(map_size(arguments))
     |> write_map(arguments, &write_argument/2)
   end
 
@@ -234,14 +247,7 @@ defmodule RfwFormats.Binary.BlobEncoder do
     encoder
     |> write_byte(@ms_switch)
     |> write_argument(input)
-    |> write_int64(map_size(outputs))
-    |> write_map(outputs, fn enc, {k, v} ->
-      enc
-      |> (fn e ->
-            if k == nil, do: write_byte(e, @ms_default), else: write_argument(e, k)
-          end).()
-      |> write_argument(v)
-    end)
+    |> write_switch_outputs(outputs)
   end
 
   defp write_argument(encoder, %Loop{input: input, output: output}) do
@@ -283,7 +289,6 @@ defmodule RfwFormats.Binary.BlobEncoder do
     encoder
     |> write_byte(@ms_event)
     |> write_string(event_name)
-    |> write_int64(map_size(event_arguments))
     |> write_map(event_arguments, &write_argument/2)
   end
 
@@ -319,16 +324,28 @@ defmodule RfwFormats.Binary.BlobEncoder do
 
   defp write_argument(encoder, value), do: write_value(encoder, value)
 
+  defp write_switch_outputs(encoder, outputs) do
+    encoder
+    |> write_int64(map_size(outputs))
+    |> write_map(outputs, fn encoder, {key, value} ->
+      encoder
+      |> write_switch_key(key)
+      |> write_argument(value)
+    end)
+  end
+
+  defp write_switch_key(encoder, nil) do
+    write_byte(encoder, @ms_default)
+  end
+
+  defp write_switch_key(encoder, key) do
+    write_argument(encoder, key)
+  end
+
   defp write_part_list(encoder, parts) do
     encoder
     |> write_int64(length(parts))
     |> write_list(parts, &write_part/2)
-  end
-
-  defp write_part(encoder, part) when is_integer(part) do
-    encoder
-    |> write_byte(@ms_int64)
-    |> write_int64(part)
   end
 
   defp write_part(encoder, part) when is_binary(part) do
@@ -337,8 +354,10 @@ defmodule RfwFormats.Binary.BlobEncoder do
     |> write_string(part)
   end
 
-  defp write_part(_encoder, part) do
-    raise "Unsupported part type: #{inspect(part)}"
+  defp write_part(encoder, part) when is_integer(part) do
+    encoder
+    |> write_byte(@ms_int64)
+    |> write_int64(part)
   end
 
   defp write_byte(%__MODULE__{bytes: bytes} = encoder, byte) when is_integer(byte) do
@@ -360,13 +379,14 @@ defmodule RfwFormats.Binary.BlobEncoder do
   end
 
   defp write_list(encoder, list, write_fn) do
-    Enum.reduce(list, encoder, fn acc, item -> write_fn.(item, acc) end)
+    Enum.reduce(list, encoder, fn item, acc -> write_fn.(acc, item) end)
   end
 
   defp write_map(encoder, map, write_fn) do
-    Enum.reduce(map, encoder, fn acc, {k, v} ->
-      acc = write_string(acc, k)
-      write_fn.(v, acc)
+    Enum.reduce(map, encoder, fn {k, v}, acc ->
+      acc
+      |> write_string(k)
+      |> write_fn.(v)
     end)
   end
 end
