@@ -90,7 +90,7 @@ defmodule RfwFormats.BinaryTest do
 
   test "Signature check in decoders" do
     assert_raise RuntimeError,
-                 "File signature mismatch. Expected FE 52 57 44, but found FE 52 46 57.",
+                 "File signature mismatch. Expected <<0xFE, 0x52, 0x57, 0x44>>, but found <<0xFE, 0x52, 0x46, 0x57>>.",
                  fn ->
                    Binary.decode_data_blob(
                      <<0xFE, 0x52, 0x46, 0x57, 0x04, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -99,7 +99,7 @@ defmodule RfwFormats.BinaryTest do
                  end
 
     assert_raise RuntimeError,
-                 "File signature mismatch. Expected FE 52 46 57, but found FE 52 57 44.",
+                 "File signature mismatch. Expected <<0xFE, 0x52, 0x46, 0x57>>, but found <<0xFE, 0x52, 0x57, 0x44>>.",
                  fn ->
                    Binary.decode_library_blob(
                      <<0xFE, 0x52, 0x57, 0x44, 0x04, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -581,7 +581,7 @@ defmodule RfwFormats.BinaryTest do
 
   test "Signature mismatch in decoders" do
     assert_raise RuntimeError,
-                 "File signature mismatch. Expected FE 52 57 44, but found FE 52 46 57.",
+                 "File signature mismatch. Expected <<0xFE, 0x52, 0x57, 0x44>>, but found <<0xFE, 0x52, 0x46, 0x57>>.",
                  fn ->
                    Binary.decode_data_blob(
                      <<0xFE, 0x52, 0x46, 0x57, 0x04, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -590,7 +590,7 @@ defmodule RfwFormats.BinaryTest do
                  end
 
     assert_raise RuntimeError,
-                 "File signature mismatch. Expected FE 52 46 57, but found FE 52 57 44.",
+                 "File signature mismatch. Expected <<0xFE, 0x52, 0x46, 0x57>>, but found <<0xFE, 0x52, 0x57, 0x44>>.",
                  fn ->
                    Binary.decode_library_blob(
                      <<0xFE, 0x52, 0x57, 0x44, 0x04, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
