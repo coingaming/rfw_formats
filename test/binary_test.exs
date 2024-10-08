@@ -204,7 +204,7 @@ defmodule RfwFormats.BinaryTest do
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEF>>
 
     assert_raise RuntimeError,
-                 "Unrecognized data type 0xEF while decoding widget declaration root.",
+                 "Unrecognized data type 0xEF while decoding blob.",
                  fn ->
                    Binary.decode_library_blob(bytes)
                  end
