@@ -4,6 +4,7 @@ defmodule RfwFormats.Binary do
   """
 
   alias RfwFormats.Model
+  require Logger
 
   @data_blob_signature <<0xFE, 0x52, 0x57, 0x44>>
   @library_blob_signature <<0xFE, 0x52, 0x46, 0x57>>
@@ -64,6 +65,7 @@ defmodule RfwFormats.Binary do
   def encode_library_blob(library) do
     encoder = %{bytes: @library_blob_signature}
     encoder = write_library(encoder, library)
+    Logger.debug("Encoded library blob: #{inspect(encoder.bytes, limit: :infinity)}")
     encoder.bytes
   end
 
@@ -72,6 +74,8 @@ defmodule RfwFormats.Binary do
   """
   @spec decode_library_blob(binary()) :: Model.RemoteWidgetLibrary.t()
   def decode_library_blob(bytes) do
+    Logger.debug("Decoding library blob: #{inspect(bytes, limit: :infinity)}")
+
     with {:ok, decoder} <- init_decoder(bytes),
          {:ok, decoder} <- expect_signature(decoder, @library_blob_signature),
          {:ok, {library, decoder}} <- read_library(decoder) do
@@ -123,6 +127,8 @@ defmodule RfwFormats.Binary do
   end
 
   defp write_value(encoder, value) do
+    Logger.debug("Writing value: #{inspect(value)}")
+
     case value do
       %Model.RemoteWidgetLibrary{} ->
         write_library(encoder, value)
@@ -173,35 +179,52 @@ defmodule RfwFormats.Binary do
         write_byte(encoder, @ms_false)
 
       v when is_list(v) ->
-        encoder
-        |> (fn e -> write_byte(e, @ms_list) end).()
-        |> (fn e -> write_int64(e, length(v)) end).()
-        |> (fn e -> write_list(e, v, &write_value/2) end).()
+        write_list(encoder, v)
 
       v when is_map(v) ->
-        encoder
-        |> (fn e -> write_byte(e, @ms_map) end).()
-        |> (fn e -> write_int64(e, map_size(v)) end).()
-        |> (fn e -> write_map(e, v) end).()
+        write_map(encoder, v)
 
       v when is_integer(v) ->
         encoder
-        |> (fn e -> write_byte(e, @ms_int64) end).()
-        |> (fn e -> write_int64(e, v) end).()
+        |> write_byte(@ms_int64)
+        |> write_int64(v)
 
       v when is_float(v) ->
         encoder
-        |> (fn e -> write_byte(e, @ms_binary64) end).()
-        |> (fn e -> write_float64(e, v) end).()
+        |> write_byte(@ms_binary64)
+        |> write_float64(v)
 
       v when is_binary(v) ->
         encoder
-        |> (fn e -> write_byte(e, @ms_string) end).()
-        |> (fn e -> write_string(e, v) end).()
+        |> write_byte(@ms_string)
+        |> write_string(v)
+
+      nil ->
+        write_map(encoder, %{})
 
       _ ->
         raise ArgumentError, "Unsupported value type: #{inspect(value)}"
     end
+  end
+
+  defp write_list(encoder, list) do
+    encoder
+    |> write_byte(@ms_list)
+    |> write_int64(length(list))
+    |> (fn e -> Enum.reduce(list, e, &write_value(&2, &1)) end).()
+  end
+
+  defp write_map(encoder, map) do
+    encoder
+    |> write_byte(@ms_map)
+    |> write_int64(map_size(map))
+    |> (fn e ->
+          Enum.reduce(map, e, fn {k, v}, acc ->
+            acc
+            |> write_string(to_string(k))
+            |> write_value(v)
+          end)
+        end).()
   end
 
   defp write_widget_builder_arg_reference(encoder, %Model.WidgetBuilderArgReference{
@@ -209,9 +232,9 @@ defmodule RfwFormats.Binary do
          parts: parts
        }) do
     encoder
-    |> (fn e -> write_byte(e, @ms_widget_builder_arg_reference) end).()
-    |> (fn e -> write_string(e, arg_name) end).()
-    |> (fn e -> write_parts(e, parts) end).()
+    |> write_byte(@ms_widget_builder_arg_reference)
+    |> write_string(arg_name)
+    |> write_parts(parts)
   end
 
   defp write_widget_builder_declaration(encoder, %Model.WidgetBuilderDeclaration{
@@ -219,93 +242,79 @@ defmodule RfwFormats.Binary do
          widget: widget
        }) do
     encoder
-    |> (fn e -> write_byte(e, @ms_widget_builder) end).()
-    |> (fn e -> write_string(e, arg_name) end).()
-    |> (fn e -> write_value(e, widget) end).()
+    |> write_byte(@ms_widget_builder)
+    |> write_string(arg_name)
+    |> write_value(widget)
   end
 
   defp write_loop(encoder, %Model.Loop{input: input, output: output}) do
     encoder
-    |> (fn e -> write_byte(e, @ms_loop) end).()
-    |> (fn e -> write_value(e, input) end).()
-    |> (fn e -> write_value(e, output) end).()
+    |> write_byte(@ms_loop)
+    |> write_value(input)
+    |> write_value(output)
   end
 
   defp write_loop_reference(encoder, %Model.LoopReference{loop: loop, parts: parts}) do
     encoder
-    |> (fn e -> write_byte(e, @ms_loop_reference) end).()
-    |> (fn e -> write_int64(e, loop) end).()
-    |> (fn e -> write_parts(e, parts) end).()
+    |> write_byte(@ms_loop_reference)
+    |> write_int64(loop)
+    |> write_parts(parts)
   end
 
   defp write_event_handler(encoder, %Model.EventHandler{event_name: name, event_arguments: args}) do
     encoder
-    |> (fn e -> write_byte(e, @ms_event) end).()
-    |> (fn e -> write_string(e, name) end).()
-    |> (fn e -> write_map(e, args) end).()
+    |> write_byte(@ms_event)
+    |> write_string(name)
+    |> write_map(args)
   end
 
   defp write_set_state_handler(encoder, %Model.SetStateHandler{state_reference: ref, value: value}) do
     encoder
-    |> (fn e -> write_byte(e, @ms_set_state) end).()
-    |> (fn e -> write_value(e, ref) end).()
-    |> (fn e -> write_value(e, value) end).()
-  end
-
-  defp write_list(encoder, list, write_element_fun) do
-    Enum.reduce(list, encoder, fn element, acc ->
-      write_element_fun.(acc, element)
-    end)
-  end
-
-  defp write_map(encoder, map) do
-    Enum.reduce(map, encoder, fn {k, v}, acc ->
-      acc
-      |> (fn e -> write_string(e, to_string(k)) end).()
-      |> (fn e -> write_value(e, v) end).()
-    end)
+    |> write_byte(@ms_set_state)
+    |> write_value(ref)
+    |> write_value(value)
   end
 
   defp write_constructor_call(encoder, %Model.ConstructorCall{name: name, arguments: arguments}) do
     encoder
-    |> (fn e -> write_byte(e, @ms_widget) end).()
-    |> (fn e -> write_string(e, name) end).()
-    |> (fn e -> write_map(e, arguments) end).()
+    |> write_byte(@ms_widget)
+    |> write_string(name)
+    |> write_map(arguments)
   end
 
   defp write_switch(encoder, %Model.Switch{input: input, outputs: outputs}) do
     encoder
-    |> (fn e -> write_byte(e, @ms_switch) end).()
-    |> (fn e -> write_value(e, input) end).()
-    |> (fn e -> write_switch_outputs(e, outputs) end).()
+    |> write_byte(@ms_switch)
+    |> write_value(input)
+    |> write_switch_outputs(outputs)
   end
 
   defp write_args_reference(encoder, %Model.ArgsReference{parts: parts}) do
     encoder
-    |> (fn e -> write_byte(e, @ms_args_reference) end).()
-    |> (fn e -> write_parts(e, parts) end).()
+    |> write_byte(@ms_args_reference)
+    |> write_parts(parts)
   end
 
   defp write_data_reference(encoder, %Model.DataReference{parts: parts}) do
     encoder
-    |> (fn e -> write_byte(e, @ms_data_reference) end).()
-    |> (fn e -> write_parts(e, parts) end).()
+    |> write_byte(@ms_data_reference)
+    |> write_parts(parts)
   end
 
   defp write_state_reference(encoder, %Model.StateReference{parts: parts}) do
     encoder
-    |> (fn e -> write_byte(e, @ms_state_reference) end).()
-    |> (fn e -> write_parts(e, parts) end).()
+    |> write_byte(@ms_state_reference)
+    |> write_parts(parts)
   end
 
   defp write_parts(encoder, parts) do
     encoder
-    |> (fn e -> write_int64(e, length(parts)) end).()
+    |> write_int64(length(parts))
     |> (fn e ->
-          write_list(e, parts, fn encoder, part ->
+          Enum.reduce(parts, e, fn part, acc ->
             case part do
               part when is_binary(part) or is_integer(part) ->
-                write_value(encoder, part)
+                write_value(acc, part)
 
               _ ->
                 raise ArgumentError, "Unexpected type #{inspect(part)} while encoding blob."
@@ -320,22 +329,22 @@ defmodule RfwFormats.Binary do
     Enum.reduce(outputs, encoder, fn
       {nil, v}, acc ->
         acc
-        |> (fn e -> write_byte(e, @ms_default) end).()
-        |> (fn e -> write_value(e, v) end).()
+        |> write_byte(@ms_default)
+        |> write_value(v)
 
       {k, v}, acc ->
         acc
-        |> (fn e -> write_value(e, k) end).()
-        |> (fn e -> write_value(e, v) end).()
+        |> write_value(k)
+        |> write_value(v)
     end)
   end
 
   defp write_library(encoder, %Model.RemoteWidgetLibrary{imports: imports, widgets: widgets}) do
     encoder
-    |> (fn e -> write_int64(e, length(imports)) end).()
-    |> (fn e -> write_list(e, imports, &write_import/2) end).()
-    |> (fn e -> write_int64(e, length(widgets)) end).()
-    |> (fn e -> write_list(e, widgets, &write_widget_declaration/2) end).()
+    |> write_int64(length(imports))
+    |> (fn e -> Enum.reduce(imports, e, &write_import(&2, &1)) end).()
+    |> write_int64(length(widgets))
+    |> (fn e -> Enum.reduce(widgets, e, &write_widget_declaration(&2, &1)) end).()
   end
 
   defp write_widget_declaration(encoder, %Model.WidgetDeclaration{
@@ -344,15 +353,15 @@ defmodule RfwFormats.Binary do
          root: root
        }) do
     encoder
-    |> (fn e -> write_string(e, name) end).()
-    |> (fn e -> write_value(e, initial_state || %{}) end).()
-    |> (fn e -> write_value(e, root) end).()
+    |> write_string(name)
+    |> write_value(initial_state || %{})
+    |> write_value(root)
   end
 
   defp write_import(encoder, %Model.Import{name: %Model.LibraryName{parts: parts}}) do
     encoder
-    |> (fn e -> write_int64(e, length(parts)) end).()
-    |> (fn e -> write_list(e, parts, &write_string/2) end).()
+    |> write_int64(length(parts))
+    |> (fn e -> Enum.reduce(parts, e, &write_string(&2, &1)) end).()
   end
 
   defp read_byte(decoder) do
@@ -385,6 +394,8 @@ defmodule RfwFormats.Binary do
 
   defp read_value(decoder) do
     with {:ok, {type, decoder}} <- read_byte(decoder) do
+      Logger.debug("Reading value of type: #{type}")
+
       case type do
         @ms_false ->
           {:ok, {false, decoder}}
@@ -563,11 +574,11 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_set_state_handler(decoder) do
-    with {:ok, {parts, decoder}} <- read_reference(decoder),
+    with {:ok, {state_reference, decoder}} <- read_value(decoder),
          {:ok, {value, decoder}} <- read_value(decoder) do
       {:ok,
        {%Model.SetStateHandler{
-          state_reference: %Model.StateReference{parts: parts},
+          state_reference: state_reference,
           value: value
         }, decoder}}
     end
@@ -576,7 +587,18 @@ defmodule RfwFormats.Binary do
   defp read_widget_builder_declaration(decoder) do
     with {:ok, {arg_name, decoder}} <- read_string(decoder),
          {:ok, {widget, decoder}} <- read_value(decoder) do
-      {:ok, {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder}}
+      case widget do
+        %Model.ConstructorCall{} ->
+          {:ok,
+           {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder}}
+
+        %Model.Switch{} ->
+          {:ok,
+           {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder}}
+
+        _ ->
+          {:error, "Invalid widget type in widget builder declaration"}
+      end
     end
   end
 
@@ -590,7 +612,9 @@ defmodule RfwFormats.Binary do
   defp read_library(decoder) do
     with {:ok, {imports, decoder}} <- read_import_list(decoder),
          {:ok, {widgets, decoder}} <- read_declaration_list(decoder) do
-      {:ok, {%Model.RemoteWidgetLibrary{imports: imports, widgets: widgets}, decoder}}
+      library = %Model.RemoteWidgetLibrary{imports: imports, widgets: widgets}
+      Logger.debug("Read library: #{inspect(library, pretty: true)}")
+      {:ok, {library, decoder}}
     end
   end
 
@@ -639,35 +663,14 @@ defmodule RfwFormats.Binary do
 
   defp read_bytes(%{bytes: bytes, cursor: cursor} = decoder, length) do
     if cursor + length > byte_size(bytes) do
+      Logger.error(
+        "Attempted to read #{length} bytes at offset #{cursor}, but only #{byte_size(bytes) - cursor} bytes available"
+      )
+
       {:error, "Could not read #{length} bytes at offset #{cursor}: unexpected end of file."}
     else
       data = binary_part(bytes, cursor, length)
       {:ok, {data, %{decoder | cursor: cursor + length}}}
     end
   end
-end
-
-# Implement Enumerable for relevant structs
-defimpl Enumerable, for: RfwFormats.Model.RemoteWidgetLibrary do
-  def count(%{imports: imports, widgets: widgets}), do: {:ok, length(imports) + length(widgets)}
-  def member?(_, _), do: {:error, __MODULE__}
-  def slice(_), do: {:error, __MODULE__}
-
-  def reduce(%{imports: imports, widgets: widgets}, acc, fun) do
-    Enumerable.reduce(imports ++ widgets, acc, fun)
-  end
-end
-
-defimpl Enumerable, for: RfwFormats.Model.WidgetDeclaration do
-  def count(_), do: {:ok, 1}
-  def member?(_, _), do: {:error, __MODULE__}
-  def slice(_), do: {:error, __MODULE__}
-  def reduce(declaration, acc, fun), do: Enumerable.reduce([declaration], acc, fun)
-end
-
-defimpl Enumerable, for: RfwFormats.Model.Import do
-  def count(_), do: {:ok, 1}
-  def member?(_, _), do: {:error, __MODULE__}
-  def slice(_), do: {:error, __MODULE__}
-  def reduce(import, acc, fun), do: Enumerable.reduce([import], acc, fun)
 end
