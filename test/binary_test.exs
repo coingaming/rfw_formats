@@ -137,13 +137,13 @@ defmodule RfwFormats.BinaryTest do
 
   test "Incomplete files after signatures" do
     assert_raise RuntimeError,
-                 "Could not read byte at offset 4: unexpected end of file.",
+                 "Could not read 1 bytes at offset 4: unexpected end of file.",
                  fn ->
                    Binary.decode_data_blob(<<0xFE, 0x52, 0x57, 0x44>>)
                  end
 
     assert_raise RuntimeError,
-                 "Could not read int64 at offset 4: unexpected end of file.",
+                 "Could not read 8 bytes at offset 4: unexpected end of file.",
                  fn ->
                    Binary.decode_library_blob(<<0xFE, 0x52, 0x46, 0x57>>)
                  end
