@@ -276,7 +276,7 @@ defmodule RfwFormats.BinaryTest do
       ]
     }
 
-    assert_raise ArgumentError, "Unexpected type boolean while encoding blob.", fn ->
+    assert_raise ArgumentError, "Unexpected type false while encoding blob.", fn ->
       Binary.encode_library_blob(library)
     end
   end
