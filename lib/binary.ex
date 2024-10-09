@@ -114,6 +114,7 @@ defmodule RfwFormats.Binary do
   end
 
   defp write_int64(encoder, value) do
+    Logger.debug("Writing int64: #{value}")
     %{encoder | bytes: <<encoder.bytes::binary, value::little-signed-integer-size(64)>>}
   end
 
@@ -373,8 +374,12 @@ defmodule RfwFormats.Binary do
 
   defp read_int64(decoder) do
     case read_bytes(decoder, 8) do
-      {:ok, {<<value::little-signed-integer-size(64)>>, decoder}} -> {:ok, {value, decoder}}
-      error -> error
+      {:ok, {<<value::little-signed-integer-size(64)>>, decoder}} ->
+        Logger.debug("Read int64: #{value}")
+        {:ok, {value, decoder}}
+
+      error ->
+        error
     end
   end
 
@@ -388,6 +393,7 @@ defmodule RfwFormats.Binary do
   defp read_string(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder),
          {:ok, {bytes, decoder}} <- read_bytes(decoder, length) do
+      Logger.debug("Read string of length #{length}: #{inspect(bytes)}")
       {:ok, {bytes, decoder}}
     end
   end
@@ -459,6 +465,7 @@ defmodule RfwFormats.Binary do
 
   defp read_list(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
+      Logger.debug("Reading list of length: #{length}")
       read_n_values(decoder, length, [])
     end
   end
@@ -473,6 +480,7 @@ defmodule RfwFormats.Binary do
 
   defp read_map(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
+      Logger.debug("Reading map of length: #{length}")
       read_n_pairs(decoder, length, %{})
     end
   end
@@ -547,6 +555,7 @@ defmodule RfwFormats.Binary do
 
   defp read_switch_outputs(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
+      Logger.debug("Reading switch with #{length} outputs")
       read_n_switch_cases(decoder, length, %{})
     end
   end
@@ -609,6 +618,7 @@ defmodule RfwFormats.Binary do
 
   defp read_import_list(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
+      Logger.debug("Reading import list of length: #{length}")
       read_n_imports(decoder, length, [])
     end
   end
@@ -629,6 +639,7 @@ defmodule RfwFormats.Binary do
 
   defp read_declaration_list(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
+      Logger.debug("Reading declaration list of length: #{length}")
       read_n_declarations(decoder, length, [])
     end
   end
