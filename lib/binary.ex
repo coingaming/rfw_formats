@@ -587,18 +587,7 @@ defmodule RfwFormats.Binary do
   defp read_widget_builder_declaration(decoder) do
     with {:ok, {arg_name, decoder}} <- read_string(decoder),
          {:ok, {widget, decoder}} <- read_value(decoder) do
-      case widget do
-        %Model.ConstructorCall{} ->
-          {:ok,
-           {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder}}
-
-        %Model.Switch{} ->
-          {:ok,
-           {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder}}
-
-        _ ->
-          {:error, "Invalid widget type in widget builder declaration"}
-      end
+      {:ok, {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder}}
     end
   end
 
@@ -663,10 +652,6 @@ defmodule RfwFormats.Binary do
 
   defp read_bytes(%{bytes: bytes, cursor: cursor} = decoder, length) do
     if cursor + length > byte_size(bytes) do
-      Logger.error(
-        "Attempted to read #{length} bytes at offset #{cursor}, but only #{byte_size(bytes) - cursor} bytes available"
-      )
-
       {:error, "Could not read #{length} bytes at offset #{cursor}: unexpected end of file."}
     else
       data = binary_part(bytes, cursor, length)
