@@ -509,18 +509,18 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_map(decoder) do
-    with {:ok, {length, decoder}} <- read_int64(decoder) do
+    with {:ok, {length, decoder1}} <- read_int64(decoder) do
       Logger.notice("Reading map of length: #{length}")
-      read_n_pairs(decoder, length, %{})
+      read_n_pairs(decoder1, length, %{})
     end
   end
 
   defp read_n_pairs(decoder, 0, acc), do: {:ok, {acc, decoder}}
 
   defp read_n_pairs(decoder, n, acc) do
-    with {:ok, {key, decoder}} <- read_string(decoder),
-         {:ok, {value, decoder}} <- read_value(decoder) do
-      read_n_pairs(decoder, n - 1, Map.put(acc, key, value))
+    with {:ok, {key, decoder1}} <- read_string(decoder),
+         {:ok, {value, decoder2}} <- read_value(decoder1) do
+      read_n_pairs(decoder2, n - 1, Map.put(acc, key, value))
     end
   end
 
@@ -532,9 +532,9 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_constructor_call(decoder) do
-    with {:ok, {name, decoder}} <- read_string(decoder),
-         {:ok, {arguments, decoder}} <- read_value(decoder) do
-      {:ok, {%Model.ConstructorCall{name: name, arguments: arguments}, decoder}}
+    with {:ok, {name, decoder1}} <- read_string(decoder),
+         {:ok, {arguments, decoder2}} <- read_value(decoder1) do
+      {:ok, {%Model.ConstructorCall{name: name, arguments: arguments}, decoder2}}
     end
   end
 
@@ -571,15 +571,15 @@ defmodule RfwFormats.Binary do
 
   defp read_event_handler(decoder) do
     with {:ok, {name, decoder}} <- read_string(decoder),
-         {:ok, {arguments, decoder}} <- read_map(decoder) do
+         {:ok, {arguments, decoder}} <- read_value(decoder) do
       {:ok, {%Model.EventHandler{event_name: name, event_arguments: arguments}, decoder}}
     end
   end
 
   defp read_switch(decoder) do
-    with {:ok, {input, decoder}} <- read_value(decoder),
-         {:ok, {outputs, decoder}} <- read_switch_outputs(decoder) do
-      {:ok, {%Model.Switch{input: input, outputs: outputs}, decoder}}
+    with {:ok, {input, decoder1}} <- read_value(decoder),
+         {:ok, {outputs, decoder2}} <- read_switch_outputs(decoder1) do
+      {:ok, {%Model.Switch{input: input, outputs: outputs}, decoder2}}
     end
   end
 
@@ -613,20 +613,20 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_set_state_handler(decoder) do
-    with {:ok, {state_reference, decoder}} <- read_value(decoder),
-         {:ok, {value, decoder}} <- read_value(decoder) do
+    with {:ok, {state_reference, decoder1}} <- read_value(decoder),
+         {:ok, {value, decoder2}} <- read_value(decoder1) do
       {:ok,
        {%Model.SetStateHandler{
           state_reference: state_reference,
           value: value
-        }, decoder}}
+        }, decoder2}}
     end
   end
 
   defp read_widget_builder_declaration(decoder) do
-    with {:ok, {arg_name, decoder}} <- read_string(decoder),
-         {:ok, {widget, decoder}} <- read_value(decoder) do
-      {:ok, {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder}}
+    with {:ok, {arg_name, decoder1}} <- read_string(decoder),
+         {:ok, {widget, decoder2}} <- read_value(decoder1) do
+      {:ok, {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder2}}
     end
   end
 
@@ -687,11 +687,11 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_declaration(decoder) do
-    with {:ok, {name, decoder}} <- read_string(decoder),
-         {:ok, {initial_state, decoder}} <- read_optional_map(decoder),
-         {:ok, {root, decoder}} <- read_value(decoder) do
+    with {:ok, {name, decoder1}} <- read_string(decoder),
+         {:ok, {initial_state, decoder2}} <- read_optional_map(decoder1),
+         {:ok, {root, decoder3}} <- read_value(decoder2) do
       {:ok,
-       {%Model.WidgetDeclaration{name: name, initial_state: initial_state, root: root}, decoder}}
+       {%Model.WidgetDeclaration{name: name, initial_state: initial_state, root: root}, decoder3}}
     end
   end
 
