@@ -280,7 +280,15 @@ defmodule RfwFormats.Binary do
     encoder
     |> write_byte(@ms_widget)
     |> write_string(name)
-    |> write_map(arguments)
+    # Write the number of arguments
+    |> write_int64(map_size(arguments))
+    |> (fn e ->
+          Enum.reduce(arguments, e, fn {k, v}, acc ->
+            acc
+            |> write_string(to_string(k))
+            |> write_value(v)
+          end)
+        end).()
   end
 
   defp write_switch(encoder, %Model.Switch{input: input, outputs: outputs}) do
@@ -532,9 +540,24 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_constructor_call(decoder) do
-    with {:ok, {name, decoder1}} <- read_string(decoder),
-         {:ok, {arguments, decoder2}} <- read_value(decoder1) do
-      {:ok, {%Model.ConstructorCall{name: name, arguments: arguments}, decoder2}}
+    with {:ok, {name, decoder}} <- read_string(decoder),
+         {:ok, {arguments, decoder}} <- read_constructor_arguments(decoder) do
+      {:ok, {%Model.ConstructorCall{name: name, arguments: arguments}, decoder}}
+    end
+  end
+
+  defp read_constructor_arguments(decoder) do
+    with {:ok, {length, decoder}} <- read_int64(decoder) do
+      read_n_constructor_arguments(decoder, length, %{})
+    end
+  end
+
+  defp read_n_constructor_arguments(decoder, 0, acc), do: {:ok, {acc, decoder}}
+
+  defp read_n_constructor_arguments(decoder, n, acc) do
+    with {:ok, {key, decoder}} <- read_string(decoder),
+         {:ok, {value, decoder}} <- read_value(decoder) do
+      read_n_constructor_arguments(decoder, n - 1, Map.put(acc, key, value))
     end
   end
 
