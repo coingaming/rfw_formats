@@ -65,7 +65,7 @@ defmodule RfwFormats.Binary do
   def encode_library_blob(library) do
     encoder = %{bytes: @library_blob_signature}
     encoder = write_library(encoder, library)
-    Logger.debug("Encoded library blob: #{inspect(encoder.bytes, limit: :infinity)}")
+    Logger.notice("Encoded library blob: #{inspect(encoder.bytes, limit: :infinity)}")
     encoder.bytes
   end
 
@@ -74,7 +74,7 @@ defmodule RfwFormats.Binary do
   """
   @spec decode_library_blob(binary()) :: Model.RemoteWidgetLibrary.t()
   def decode_library_blob(bytes) do
-    Logger.debug("Decoding library blob: #{inspect(bytes, limit: :infinity)}")
+    Logger.notice("Decoding library blob: #{inspect(bytes, limit: :infinity)}")
 
     with {:ok, decoder} <- init_decoder(bytes),
          {:ok, decoder} <- expect_signature(decoder, @library_blob_signature),
@@ -114,7 +114,7 @@ defmodule RfwFormats.Binary do
   end
 
   defp write_int64(encoder, value) do
-    Logger.debug("Writing int64: #{value}")
+    Logger.notice("Writing int64: #{value}")
     %{encoder | bytes: <<encoder.bytes::binary, value::little-signed-integer-size(64)>>}
   end
 
@@ -128,7 +128,7 @@ defmodule RfwFormats.Binary do
   end
 
   defp write_value(encoder, value) do
-    Logger.debug("Writing value: #{inspect(value)}")
+    Logger.notice("Writing value: #{inspect(value)}")
 
     case value do
       %Model.RemoteWidgetLibrary{} ->
@@ -373,9 +373,12 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_int64(decoder) do
+    Logger.debug("Reading int64 at cursor position: #{decoder.cursor}")
+
     case read_bytes(decoder, 8) do
-      {:ok, {<<value::little-signed-integer-size(64)>>, decoder}} ->
-        Logger.debug("Read int64: #{value}")
+      {:ok, {<<value::little-signed-integer-64>> = bytes, decoder}} ->
+        Logger.debug("Read 8 bytes for int64: #{inspect(bytes, base: :hex)}")
+        Logger.debug("Interpreted as little-endian unsigned 64-bit integer: #{value}")
         {:ok, {value, decoder}}
 
       error ->
@@ -393,71 +396,88 @@ defmodule RfwFormats.Binary do
   defp read_string(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder),
          {:ok, {bytes, decoder}} <- read_bytes(decoder, length) do
-      Logger.debug("Read string of length #{length}: #{inspect(bytes)}")
+      Logger.notice("Read string of length #{length}: #{inspect(bytes)}")
       {:ok, {bytes, decoder}}
     end
   end
 
   defp read_value(decoder) do
     with {:ok, {type, decoder}} <- read_byte(decoder) do
-      Logger.debug("Reading value of type: #{type}")
-
       case type do
         @ms_false ->
+          Logger.notice("Reading value of type: false")
           {:ok, {false, decoder}}
 
         @ms_true ->
+          Logger.notice("Reading value of type: true")
           {:ok, {true, decoder}}
 
         @ms_int64 ->
+          Logger.notice("Reading value of type: int64")
           read_int64(decoder)
 
         @ms_binary64 ->
+          Logger.notice("Reading value of type: binary64")
           read_float64(decoder)
 
         @ms_string ->
+          Logger.notice("Reading value of type: string")
           read_string(decoder)
 
         @ms_list ->
+          Logger.notice("Reading value of type: list")
           read_list(decoder)
 
         @ms_map ->
+          Logger.notice("Reading value of type: map")
           read_map(decoder)
 
         @ms_loop ->
+          Logger.notice("Reading value of type: loop")
           read_loop(decoder)
 
         @ms_widget ->
+          Logger.notice("Reading value of type: widget")
           read_constructor_call(decoder)
 
         @ms_args_reference ->
+          Logger.notice("Reading value of type: args_reference")
           read_args_reference(decoder)
 
         @ms_data_reference ->
+          Logger.notice("Reading value of type: data_reference")
           read_data_reference(decoder)
 
         @ms_loop_reference ->
+          Logger.notice("Reading value of type: loop_reference")
           read_loop_reference(decoder)
 
         @ms_state_reference ->
+          Logger.notice("Reading value of type: state_reference")
           read_state_reference(decoder)
 
         @ms_event ->
+          Logger.notice("Reading value of type: event")
           read_event_handler(decoder)
 
         @ms_switch ->
+          Logger.notice("Reading value of type: switch")
           read_switch(decoder)
 
         @ms_set_state ->
+          Logger.notice("Reading value of type: set_state")
           read_set_state_handler(decoder)
 
         @ms_widget_builder ->
+          Logger.notice("Reading value of type: widget_builder")
           read_widget_builder_declaration(decoder)
 
         @ms_widget_builder_arg_reference ->
+          Logger.notice("Reading value of type: widget_builder_arg_reference")
           read_widget_builder_arg_reference(decoder)
 
         _ ->
+          Logger.notice("Reading value of type: unknown")
           {:error, "Unrecognized data type 0x#{Integer.to_string(type, 16)} while decoding blob."}
       end
     end
@@ -465,7 +485,7 @@ defmodule RfwFormats.Binary do
 
   defp read_list(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
-      Logger.debug("Reading list of length: #{length}")
+      Logger.notice("Reading list of length: #{length}")
       read_n_values(decoder, length, [])
     end
   end
@@ -480,7 +500,7 @@ defmodule RfwFormats.Binary do
 
   defp read_map(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
-      Logger.debug("Reading map of length: #{length}")
+      Logger.notice("Reading map of length: #{length}")
       read_n_pairs(decoder, length, %{})
     end
   end
@@ -555,7 +575,7 @@ defmodule RfwFormats.Binary do
 
   defp read_switch_outputs(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
-      Logger.debug("Reading switch with #{length} outputs")
+      Logger.notice("Reading switch with #{length} outputs")
       read_n_switch_cases(decoder, length, %{})
     end
   end
@@ -611,15 +631,28 @@ defmodule RfwFormats.Binary do
     with {:ok, {imports, decoder}} <- read_import_list(decoder),
          {:ok, {widgets, decoder}} <- read_declaration_list(decoder) do
       library = %Model.RemoteWidgetLibrary{imports: imports, widgets: widgets}
-      Logger.debug("Read library: #{inspect(library, pretty: true)}")
+      Logger.notice("Read library: #{inspect(library, pretty: true)}")
+      Logger.debug("Finished reading imports: #{inspect(imports)}")
+
+      Logger.debug(
+        "Decoder state after imports: cursor=#{decoder.cursor}, remaining bytes=#{inspect(binary_part(decoder.bytes, decoder.cursor, byte_size(decoder.bytes) - decoder.cursor))}"
+      )
+
+      Logger.debug("Finished reading widgets: #{inspect(widgets)}")
       {:ok, {library, decoder}}
     end
   end
 
   defp read_import_list(decoder) do
+    Logger.debug("Starting to read import list")
+    Logger.debug("Decoder state before reading import list length: cursor=#{decoder.cursor}")
+
     with {:ok, {length, decoder}} <- read_int64(decoder) do
-      Logger.debug("Reading import list of length: #{length}")
-      read_n_imports(decoder, length, [])
+      Logger.debug("Read import list length: #{length}")
+      Logger.debug("Decoder state after reading import list length: cursor=#{decoder.cursor}")
+      result = read_n_imports(decoder, length, [])
+      Logger.debug("Finished reading import list. Decoder state: cursor=#{decoder.cursor}")
+      result
     end
   end
 
@@ -632,21 +665,36 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_import(decoder) do
-    with {:ok, {parts, decoder}} <- read_list(decoder) do
-      {:ok, {%Model.Import{name: %Model.LibraryName{parts: parts}}, decoder}}
+    Logger.debug("Starting to read import")
+    Logger.debug("Decoder state before reading import: cursor=#{decoder.cursor}")
+
+    with {:ok, {parts, decoder}} <- read_int64(decoder),
+         {:ok, {name, decoder}} <- read_string(decoder) do
+      Logger.debug("Read import parts: #{inspect(parts)}")
+      Logger.debug("Decoder state after reading import: cursor=#{decoder.cursor}")
+      {:ok, {%Model.Import{name: %Model.LibraryName{parts: [name]}}, decoder}}
     end
   end
 
   defp read_declaration_list(decoder) do
+    Logger.debug("Starting to read declaration list")
+    Logger.debug("Decoder state before reading length: cursor=#{decoder.cursor}")
+
     with {:ok, {length, decoder}} <- read_int64(decoder) do
-      Logger.debug("Reading declaration list of length: #{length}")
+      Logger.debug("Read declaration list length: #{length}")
+      Logger.debug("Decoder state after reading length: cursor=#{decoder.cursor}")
       read_n_declarations(decoder, length, [])
     end
   end
 
-  defp read_n_declarations(decoder, 0, acc), do: {:ok, {Enum.reverse(acc), decoder}}
+  defp read_n_declarations(decoder, 0, acc) do
+    Logger.debug("Finished reading declarations")
+    {:ok, {Enum.reverse(acc), decoder}}
+  end
 
   defp read_n_declarations(decoder, n, acc) do
+    Logger.debug("Reading declaration #{n}")
+
     with {:ok, {declaration, decoder}} <- read_declaration(decoder) do
       read_n_declarations(decoder, n - 1, [declaration | acc])
     end

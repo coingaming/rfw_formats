@@ -1,5 +1,8 @@
 defmodule RfwFormats.BinaryTest do
+  require Logger
+
   use ExUnit.Case
+
   alias RfwFormats.Binary
   alias RfwFormats.Model
 
@@ -9,7 +12,9 @@ defmodule RfwFormats.BinaryTest do
   @large_number 9_007_199_254_730_661
 
   test "String example" do
+    Logger.debug("Starting String example test")
     bytes = Binary.encode_data_blob("Hello")
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
@@ -21,12 +26,36 @@ defmodule RfwFormats.BinaryTest do
                0x65, 0x6C, 0x6C, 0x6F>>
 
     value = Binary.decode_data_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert is_binary(value)
     assert value == "Hello"
   end
 
+  test "Bools" do
+    Logger.debug("Starting Bools test")
+    bytes = Binary.encode_data_blob([false, true])
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
+
+    # Bytes explanation:
+    # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
+    # 0x05 - List tag
+    # 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 - List length (2)
+    # 0x00 - Boolean false
+    # 0x01 - Boolean true
+    assert bytes ==
+             <<0xFE, 0x52, 0x57, 0x44, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+               0x01>>
+
+    value = Binary.decode_data_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
+    assert is_list(value)
+    assert value == [false, true]
+  end
+
   test "Big integer example" do
+    Logger.debug("Starting Big integer example test")
     bytes = Binary.encode_data_blob(@large_number)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
@@ -36,12 +65,15 @@ defmodule RfwFormats.BinaryTest do
              <<0xFE, 0x52, 0x57, 0x44, 0x02, 0xA5, 0xD7, 0xFF, 0xFF, 0xFF, 0xFF, 0x1F, 0x00>>
 
     value = Binary.decode_data_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert is_integer(value)
     assert value == @large_number
   end
 
   test "Big negative integer example" do
+    Logger.debug("Starting Big negative integer example test")
     bytes = Binary.encode_data_blob(-@large_number)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
@@ -51,12 +83,15 @@ defmodule RfwFormats.BinaryTest do
              <<0xFE, 0x52, 0x57, 0x44, 0x02, 0x5B, 0x28, 0x00, 0x00, 0x00, 0x00, 0xE0, 0xFF>>
 
     value = Binary.decode_data_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert is_integer(value)
     assert value == -@large_number
   end
 
   test "Small integer example" do
+    Logger.debug("Starting Small integer example test")
     bytes = Binary.encode_data_blob(1)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
@@ -66,12 +101,15 @@ defmodule RfwFormats.BinaryTest do
              <<0xFE, 0x52, 0x57, 0x44, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>>
 
     value = Binary.decode_data_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert is_integer(value)
     assert value == 1
   end
 
   test "Small negative integer example" do
+    Logger.debug("Starting Small negative integer example test")
     bytes = Binary.encode_data_blob(-1)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
@@ -81,12 +119,15 @@ defmodule RfwFormats.BinaryTest do
              <<0xFE, 0x52, 0x57, 0x44, 0x02, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF>>
 
     value = Binary.decode_data_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert is_integer(value)
     assert value == -1
   end
 
   test "Zero integer example" do
+    Logger.debug("Starting Zero integer example test")
     bytes = Binary.encode_data_blob(0)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
@@ -96,12 +137,42 @@ defmodule RfwFormats.BinaryTest do
              <<0xFE, 0x52, 0x57, 0x44, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>>
 
     value = Binary.decode_data_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert is_integer(value)
     assert value == 0
   end
 
+  test "Doubles" do
+    Logger.debug("Starting Doubles test")
+    bytes = Binary.encode_data_blob(0.25)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
+
+    # Bytes explanation:
+    # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
+    # 0x03 - Double tag
+    # 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x3F - 64-bit little-endian IEEE 754 representation of 0.25
+    assert bytes ==
+             <<0xFE, 0x52, 0x57, 0x44, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x3F>>
+
+    value = Binary.decode_data_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
+    assert is_float(value)
+    assert value == 0.25
+  end
+
+  test "Specific double value" do
+    Logger.debug("Starting Specific double value test")
+    bytes = Binary.encode_data_blob(0.25)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
+    value = Binary.decode_data_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
+    assert value == 0.25
+  end
+
   test "Map example" do
+    Logger.debug("Starting Map example test")
     bytes = Binary.encode_data_blob(%{"a" => 15})
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
@@ -117,11 +188,14 @@ defmodule RfwFormats.BinaryTest do
                0x00, 0x00, 0x00>>
 
     value = Binary.decode_data_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert is_map(value)
     assert value == %{"a" => 15}
   end
 
   test "Signature check in decoders" do
+    Logger.debug("Starting Signature check in decoders test")
+
     assert_raise RuntimeError,
                  "File signature mismatch. Expected <<0xFE, 0x52, 0x57, 0x44>>, but found <<0xFE, 0x52, 0x46, 0x57>>.",
                  fn ->
@@ -142,6 +216,8 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Trailing byte check" do
+    Logger.debug("Starting Trailing byte check test")
+
     assert_raise RuntimeError, "Unexpected trailing bytes after value.", fn ->
       Binary.decode_data_blob(<<0xFE, 0x52, 0x57, 0x44, 0x00, 0x00>>)
     end
@@ -155,6 +231,8 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Incomplete files in signatures" do
+    Logger.debug("Starting Incomplete files in signatures test")
+
     assert_raise RuntimeError,
                  "Could not read 4 bytes at offset 0: unexpected end of file.",
                  fn ->
@@ -169,6 +247,8 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Incomplete files after signatures" do
+    Logger.debug("Starting Incomplete files after signatures test")
+
     assert_raise RuntimeError,
                  "Could not read 1 bytes at offset 4: unexpected end of file.",
                  fn ->
@@ -183,6 +263,7 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Invalid value tag" do
+    Logger.debug("Starting Invalid value tag test")
     # Test that the decoder detects an invalid value tag (0xCC is not a valid tag)
     assert_raise RuntimeError, "Unrecognized data type 0xCC while decoding blob.", fn ->
       Binary.decode_data_blob(<<0xFE, 0x52, 0x57, 0x44, 0xCC>>)
@@ -190,7 +271,9 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Library encoder smoke test" do
+    Logger.debug("Starting Library encoder smoke test")
     bytes = Binary.encode_library_blob(%Model.RemoteWidgetLibrary{imports: [], widgets: []})
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x46, 0x57 - Library blob signature
@@ -201,17 +284,22 @@ defmodule RfwFormats.BinaryTest do
                0x00, 0x00, 0x00, 0x00, 0x00, 0x00>>
 
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert Enum.empty?(value.imports)
     assert Enum.empty?(value.widgets)
   end
 
+  @tag :verbose
   test "Library encoder: imports" do
+    Logger.debug("Starting Library encoder: imports test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [%Model.Import{name: %Model.LibraryName{parts: ["a"]}}],
       widgets: []
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x46, 0x57 - Library blob signature
@@ -226,27 +314,14 @@ defmodule RfwFormats.BinaryTest do
                0x61, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00>>
 
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert length(value.imports) == 1
     assert hd(value.imports).name == %Model.LibraryName{parts: ["a"]}
     assert Enum.empty?(value.widgets)
   end
 
-  test "Doubles" do
-    bytes = Binary.encode_data_blob(0.25)
-
-    # Bytes explanation:
-    # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
-    # 0x03 - Double tag
-    # 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x3F - 64-bit little-endian IEEE 754 representation of 0.25
-    assert bytes ==
-             <<0xFE, 0x52, 0x57, 0x44, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x3F>>
-
-    value = Binary.decode_data_blob(bytes)
-    assert is_float(value)
-    assert value == 0.25
-  end
-
   test "Library decoder: invalid widget declaration root" do
+    Logger.debug("Starting Library decoder: invalid widget declaration root test")
     # Bytes explanation:
     # 0xFE, 0x52, 0x46, 0x57 - Library blob signature
     # 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 - Number of imports (0)
@@ -268,6 +343,8 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Library encoder: args references" do
+    Logger.debug("Starting Library encoder: args references test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -287,6 +364,7 @@ defmodule RfwFormats.BinaryTest do
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x46, 0x57 - Library blob signature
@@ -322,6 +400,7 @@ defmodule RfwFormats.BinaryTest do
     assert bytes == expected_bytes
 
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert Enum.empty?(value.imports)
     assert length(value.widgets) == 1
     widget = hd(value.widgets)
@@ -337,6 +416,8 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Library encoder: invalid args references" do
+    Logger.debug("Starting Library encoder: invalid args references test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -361,6 +442,7 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Library decoder: invalid args references" do
+    Logger.debug("Starting Library decoder: invalid args references test")
     # Bytes explanation: Same as previous test, except:
     # 0xAC - Invalid tag for ArgsReference part (should be 0x04 for String or 0x02 for Integer)
     bytes =
@@ -377,6 +459,8 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Library encoder: switches with non-null key" do
+    Logger.debug("Starting Library encoder: switches with non-null key test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -389,6 +473,7 @@ defmodule RfwFormats.BinaryTest do
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x46, 0x57 - Library blob signature
@@ -419,6 +504,7 @@ defmodule RfwFormats.BinaryTest do
     assert bytes == expected_bytes
 
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert Enum.empty?(value.imports)
     assert length(value.widgets) == 1
     widget = hd(value.widgets)
@@ -431,25 +517,9 @@ defmodule RfwFormats.BinaryTest do
     assert widget.root.outputs["c"] == "d"
   end
 
-  test "Bools" do
-    bytes = Binary.encode_data_blob([false, true])
-
-    # Bytes explanation:
-    # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
-    # 0x05 - List tag
-    # 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 - List length (2)
-    # 0x00 - Boolean false
-    # 0x01 - Boolean true
-    assert bytes ==
-             <<0xFE, 0x52, 0x57, 0x44, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-               0x01>>
-
-    value = Binary.decode_data_blob(bytes)
-    assert is_list(value)
-    assert value == [false, true]
-  end
-
   test "Library encoder: loops" do
+    Logger.debug("Starting Library encoder: loops test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -477,11 +547,15 @@ defmodule RfwFormats.BinaryTest do
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert value == library
   end
 
   test "Library encoder: data references" do
+    Logger.debug("Starting Library encoder: data references test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -499,11 +573,15 @@ defmodule RfwFormats.BinaryTest do
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert value == library
   end
 
   test "Library encoder: state references" do
+    Logger.debug("Starting Library encoder: state references test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -521,11 +599,15 @@ defmodule RfwFormats.BinaryTest do
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert value == library
   end
 
   test "Library encoder: event handler" do
+    Logger.debug("Starting Library encoder: event handler test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -546,11 +628,15 @@ defmodule RfwFormats.BinaryTest do
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert value == library
   end
 
   test "Library encoder: state setter" do
+    Logger.debug("Starting Library encoder: state setter test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -571,11 +657,15 @@ defmodule RfwFormats.BinaryTest do
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert value == library
   end
 
   test "Library encoder: initial state" do
+    Logger.debug("Starting Library encoder: initial state test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -591,11 +681,15 @@ defmodule RfwFormats.BinaryTest do
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert value == library
   end
 
   test "Library encoder: widget builders work" do
+    Logger.debug("Starting Library encoder: widget builders work test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -624,11 +718,15 @@ defmodule RfwFormats.BinaryTest do
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert value == library
   end
 
   test "Library encoder: widget builders throw on invalid widget" do
+    Logger.debug("Starting Library encoder: widget builders throw on invalid widget test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -657,6 +755,8 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Library encoder: switch with empty outputs" do
+    Logger.debug("Starting Library encoder: switch with empty outputs test")
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -674,17 +774,15 @@ defmodule RfwFormats.BinaryTest do
     }
 
     bytes = Binary.encode_library_blob(library)
+    Logger.debug("Encoded bytes: #{inspect(bytes, limit: :infinity)}")
     value = Binary.decode_library_blob(bytes)
+    Logger.debug("Decoded value: #{inspect(value)}")
     assert value == library
   end
 
-  test "Specific double value" do
-    bytes = Binary.encode_data_blob(0.25)
-    value = Binary.decode_data_blob(bytes)
-    assert value == 0.25
-  end
-
   test "Signature mismatch in decoders" do
+    Logger.debug("Starting Signature mismatch in decoders test")
+
     assert_raise RuntimeError,
                  "File signature mismatch. Expected <<0xFE, 0x52, 0x57, 0x44>>, but found <<0xFE, 0x52, 0x46, 0x57>>.",
                  fn ->
