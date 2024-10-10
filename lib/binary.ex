@@ -533,7 +533,7 @@ defmodule RfwFormats.Binary do
 
   defp read_constructor_call(decoder) do
     with {:ok, {name, decoder}} <- read_string(decoder),
-         {:ok, {arguments, decoder}} <- read_map(decoder) do
+         {:ok, {arguments, decoder}} <- read_value(decoder) do
       {:ok, {%Model.ConstructorCall{name: name, arguments: arguments}, decoder}}
     end
   end
