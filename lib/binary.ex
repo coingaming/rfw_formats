@@ -355,8 +355,18 @@ defmodule RfwFormats.Binary do
        }) do
     encoder
     |> write_string(name)
-    |> write_value(initial_state || %{})
+    # New function
+    |> write_initial_state(initial_state)
     |> write_value(root)
+  end
+
+  defp write_initial_state(encoder, nil) do
+    # Write an empty map to represent nil
+    write_int64(encoder, 0)
+  end
+
+  defp write_initial_state(encoder, initial_state) do
+    write_map(encoder, initial_state)
   end
 
   defp write_import(encoder, %Model.Import{name: %Model.LibraryName{parts: parts}}) do
@@ -676,6 +686,25 @@ defmodule RfwFormats.Binary do
     end
   end
 
+  defp read_declaration(decoder) do
+    with {:ok, {name, decoder}} <- read_string(decoder),
+         {:ok, {initial_state, decoder}} <- read_optional_map(decoder),
+         {:ok, {root, decoder}} <- read_value(decoder) do
+      {:ok,
+       {%Model.WidgetDeclaration{name: name, initial_state: initial_state, root: root}, decoder}}
+    end
+  end
+
+  defp read_optional_map(decoder) do
+    with {:ok, {length, decoder}} <- read_int64(decoder) do
+      if length == 0 do
+        {:ok, {nil, decoder}}
+      else
+        read_n_pairs(decoder, length, %{})
+      end
+    end
+  end
+
   defp read_declaration_list(decoder) do
     Logger.debug("Starting to read declaration list")
     Logger.debug("Decoder state before reading length: cursor=#{decoder.cursor}")
@@ -697,15 +726,6 @@ defmodule RfwFormats.Binary do
 
     with {:ok, {declaration, decoder}} <- read_declaration(decoder) do
       read_n_declarations(decoder, n - 1, [declaration | acc])
-    end
-  end
-
-  defp read_declaration(decoder) do
-    with {:ok, {name, decoder}} <- read_string(decoder),
-         {:ok, {initial_state, decoder}} <- read_map(decoder),
-         {:ok, {root, decoder}} <- read_value(decoder) do
-      {:ok,
-       {%Model.WidgetDeclaration{name: name, initial_state: initial_state, root: root}, decoder}}
     end
   end
 
