@@ -374,7 +374,7 @@ defmodule RfwFormats.Binary do
   end
 
   defp write_initial_state(encoder, initial_state) do
-    write_map(encoder, initial_state)
+    write_value(encoder, initial_state)
   end
 
   defp write_import(encoder, %Model.Import{name: %Model.LibraryName{parts: parts}}) do
