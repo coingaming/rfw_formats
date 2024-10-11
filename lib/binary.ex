@@ -396,10 +396,11 @@ defmodule RfwFormats.Binary do
     case read_bytes(decoder, 8) do
       {:ok, {<<value::little-signed-integer-64>> = bytes, decoder}} ->
         Logger.debug("Read 8 bytes for int64: #{inspect(bytes, base: :hex)}")
-        Logger.debug("Interpreted as little-endian unsigned 64-bit integer: #{value}")
+        Logger.debug("Interpreted as little-endian signed 64-bit integer: #{value}")
         {:ok, {value, decoder}}
 
       error ->
+        Logger.error("Failed to read int64: #{inspect(error)}")
         error
     end
   end
@@ -547,7 +548,10 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_constructor_arguments(decoder) do
+    Logger.debug("Reading constructor arguments")
+
     with {:ok, {length, decoder}} <- read_int64(decoder) do
+      Logger.debug("Number of constructor arguments: #{length}")
       read_n_constructor_arguments(decoder, length, %{})
     end
   end
@@ -555,8 +559,11 @@ defmodule RfwFormats.Binary do
   defp read_n_constructor_arguments(decoder, 0, acc), do: {:ok, {acc, decoder}}
 
   defp read_n_constructor_arguments(decoder, n, acc) do
+    Logger.debug("Reading constructor argument #{n}")
+
     with {:ok, {key, decoder}} <- read_string(decoder),
          {:ok, {value, decoder}} <- read_value(decoder) do
+      Logger.debug("Read constructor argument: #{key} = #{inspect(value)}")
       read_n_constructor_arguments(decoder, n - 1, Map.put(acc, key, value))
     end
   end
@@ -754,6 +761,10 @@ defmodule RfwFormats.Binary do
 
   defp read_bytes(%{bytes: bytes, cursor: cursor} = decoder, length) do
     if cursor + length > byte_size(bytes) do
+      Logger.error(
+        "Could not read #{length} bytes at offset #{cursor}: unexpected end of file. Total file size: #{byte_size(bytes)}"
+      )
+
       {:error, "Could not read #{length} bytes at offset #{cursor}: unexpected end of file."}
     else
       data = binary_part(bytes, cursor, length)
