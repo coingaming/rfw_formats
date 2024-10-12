@@ -663,8 +663,24 @@ defmodule RfwFormats.Binary do
 
   defp read_widget_builder_declaration(decoder) do
     with {:ok, {arg_name, decoder1}} <- read_string(decoder),
-         {:ok, {widget, decoder2}} <- read_value(decoder1) do
-      {:ok, {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder2}}
+         {:ok, {type, decoder2}} <- read_byte(decoder1) do
+      case type do
+        @ms_widget ->
+          with {:ok, {widget, decoder3}} <- read_constructor_call(decoder2) do
+            {:ok,
+             {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder3}}
+          end
+
+        @ms_switch ->
+          with {:ok, {widget, decoder3}} <- read_switch(decoder2) do
+            {:ok,
+             {%Model.WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder3}}
+          end
+
+        _ ->
+          raise RuntimeError,
+                "Unrecognized data type 0x#{Integer.to_string(type, 16) |> String.pad_leading(2, "0")} while decoding widget builder blob."
+      end
     end
   end
 
