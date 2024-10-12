@@ -373,8 +373,16 @@ defmodule RfwFormats.Binary do
     write_int64(encoder, 0)
   end
 
-  defp write_initial_state(encoder, initial_state) do
-    write_value(encoder, initial_state)
+  defp write_initial_state(encoder, initial_state) when is_map(initial_state) do
+    # Write the map size
+    encoder = write_int64(encoder, map_size(initial_state))
+
+    # Write each key-value pair without a type tag
+    Enum.reduce(initial_state, encoder, fn {k, v}, acc ->
+      acc
+      |> write_string(to_string(k))
+      |> write_value(v)
+    end)
   end
 
   defp write_import(encoder, %Model.Import{name: %Model.LibraryName{parts: parts}}) do
