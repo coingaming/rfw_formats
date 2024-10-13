@@ -171,15 +171,12 @@ defmodule RfwFormats.Binary do
     end
   end
 
-  defp write_byte(encoder, byte), do: [encoder | [byte]]
+  defp write_byte(encoder, byte), do: [encoder, <<byte>>]
 
-  defp write_int64(encoder, value) do
-    [encoder, <<value::little-signed-integer-size(64)>>]
-  end
+  defp write_int64(encoder, value), do: [encoder, <<value::little-signed-integer-size(64)>>]
 
-  defp write_string(encoder, value) do
-    [encoder, <<byte_size(value)::little-unsigned-integer-size(64)>>, value]
-  end
+  defp write_string(encoder, value),
+    do: [encoder, <<byte_size(value)::little-unsigned-integer-size(64)>>, value]
 
   defp write_value(encoder, %RemoteWidgetLibrary{} = library), do: write_library(encoder, library)
 
