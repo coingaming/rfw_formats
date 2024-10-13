@@ -68,9 +68,8 @@ defmodule RfwFormats.Binary do
   """
   @spec encode_data_blob(any()) :: binary()
   def encode_data_blob(value) do
-    encoder = [@data_blob_signature]
-    encoder = write_value(encoder, value)
-    :erlang.iolist_to_binary(encoder)
+    iolist = [@data_blob_signature | write_value([], value)]
+    :erlang.iolist_to_binary(iolist)
   end
 
   @doc """
@@ -116,9 +115,8 @@ defmodule RfwFormats.Binary do
   """
   @spec encode_library_blob(RemoteWidgetLibrary.t()) :: binary()
   def encode_library_blob(library) do
-    encoder = [@library_blob_signature]
-    encoder = write_library(encoder, library)
-    :erlang.iolist_to_binary(encoder)
+    iolist = [@library_blob_signature | write_library([], library)]
+    :erlang.iolist_to_binary(iolist)
   end
 
   @doc """
