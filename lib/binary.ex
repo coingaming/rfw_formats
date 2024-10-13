@@ -482,30 +482,26 @@ defmodule RfwFormats.Binary do
     end
   end
 
-  defp read_n_values(decoder, n, acc) do
-    if n == 0 do
-      {:ok, {Enum.reverse(acc), decoder}}
-    else
-      with {:ok, {value, decoder}} <- read_value(decoder) do
-        read_n_values(decoder, n - 1, [value | acc])
-      end
+  defp read_n_values(decoder, 0, acc), do: {:ok, {Enum.reverse(acc), decoder}}
+
+  defp read_n_values(decoder, n, acc) when n > 0 do
+    with {:ok, {value, decoder}} <- read_value(decoder) do
+      read_n_values(decoder, n - 1, [value | acc])
     end
   end
 
   defp read_map(decoder) do
     with {:ok, {length, decoder1}} <- read_int64(decoder) do
-      read_n_pairs(decoder1, length, %{})
+      read_n_pairs(decoder1, length, [])
     end
   end
 
-  defp read_n_pairs(decoder, n, acc) do
-    if n == 0 do
-      {:ok, {acc, decoder}}
-    else
-      with {:ok, {key, decoder1}} <- read_string(decoder),
-           {:ok, {value, decoder2}} <- read_value(decoder1) do
-        read_n_pairs(decoder2, n - 1, Map.put(acc, key, value))
-      end
+  defp read_n_pairs(decoder, 0, acc), do: {:ok, {Enum.into(acc, %{}), decoder}}
+
+  defp read_n_pairs(decoder, n, acc) when n > 0 do
+    with {:ok, {key, decoder1}} <- read_string(decoder),
+         {:ok, {value, decoder2}} <- read_value(decoder1) do
+      read_n_pairs(decoder2, n - 1, [{key, value} | acc])
     end
   end
 
@@ -525,18 +521,16 @@ defmodule RfwFormats.Binary do
 
   defp read_constructor_arguments(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
-      read_n_constructor_arguments(decoder, length, %{})
+      read_n_constructor_arguments(decoder, length, [])
     end
   end
 
-  defp read_n_constructor_arguments(decoder, n, acc) do
-    if n == 0 do
-      {:ok, {acc, decoder}}
-    else
-      with {:ok, {key, decoder}} <- read_string(decoder),
-           {:ok, {value, decoder}} <- read_value(decoder) do
-        read_n_constructor_arguments(decoder, n - 1, Map.put(acc, key, value))
-      end
+  defp read_n_constructor_arguments(decoder, 0, acc), do: {:ok, {Enum.into(acc, %{}), decoder}}
+
+  defp read_n_constructor_arguments(decoder, n, acc) when n > 0 do
+    with {:ok, {key, decoder}} <- read_string(decoder),
+         {:ok, {value, decoder}} <- read_value(decoder) do
+      read_n_constructor_arguments(decoder, n - 1, [{key, value} | acc])
     end
   end
 
@@ -587,18 +581,16 @@ defmodule RfwFormats.Binary do
 
   defp read_switch_outputs(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
-      read_n_switch_cases(decoder, length, %{})
+      read_n_switch_cases(decoder, length, [])
     end
   end
 
-  defp read_n_switch_cases(decoder, n, acc) do
-    if n == 0 do
-      {:ok, {acc, decoder}}
-    else
-      with {:ok, {key, decoder}} <- read_switch_key(decoder),
-           {:ok, {value, decoder}} <- read_value(decoder) do
-        read_n_switch_cases(decoder, n - 1, Map.put(acc, key, value))
-      end
+  defp read_n_switch_cases(decoder, 0, acc), do: {:ok, {Enum.into(acc, %{}), decoder}}
+
+  defp read_n_switch_cases(decoder, n, acc) when n > 0 do
+    with {:ok, {key, decoder}} <- read_switch_key(decoder),
+         {:ok, {value, decoder}} <- read_value(decoder) do
+      read_n_switch_cases(decoder, n - 1, [{key, value} | acc])
     end
   end
 
@@ -698,7 +690,7 @@ defmodule RfwFormats.Binary do
       if length == 0 do
         {:ok, {nil, decoder}}
       else
-        read_n_pairs(decoder, length, %{})
+        read_n_pairs(decoder, length, [])
       end
     end
   end
