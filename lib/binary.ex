@@ -227,9 +227,11 @@ defmodule RfwFormats.Binary do
   end
 
   defp write_map(encoder, map) do
+    sorted_map = Map.to_list(map) |> Enum.sort()
+
     [encoder, [@ms_map, <<map_size(map)::little-unsigned-integer-size(64)>>]]
     |> then(fn e ->
-      Enum.reduce(map, e, fn {k, v}, acc ->
+      Enum.reduce(sorted_map, e, fn {k, v}, acc ->
         acc
         |> write_string(to_string(k))
         |> write_value(v)
