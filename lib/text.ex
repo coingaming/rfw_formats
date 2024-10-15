@@ -184,8 +184,8 @@ defmodule RfwFormats.Text do
   @spec parse_data_file(String.t()) :: Model.dynamic_map()
   def parse_data_file(file) do
     parser = __MODULE__.Parser.new(tokenize(file), nil)
-    IO.inspect(parser, label: "Tokens")
-    __MODULE__.Parser.read_data_file(parser)
+    {_parser, result} = __MODULE__.Parser.read_data_file(parser)
+    result
   end
 
   @doc """
@@ -1263,30 +1263,29 @@ defmodule RfwFormats.Text do
       extended = Keyword.get(opts, :extended, false)
       widget_builder_scope = Keyword.get(opts, :widget_builder_scope, [])
 
-      expect_symbol(parser, SymbolToken.open_brace())
+      parser = expect_symbol(parser, SymbolToken.open_brace())
 
-      results =
+      {parser, results} =
         read_map_body(parser, extended: extended, widget_builder_scope: widget_builder_scope)
 
-      expect_symbol(parser, SymbolToken.close_brace())
-      results
+      parser = expect_symbol(parser, SymbolToken.close_brace())
+      {parser, results}
     end
 
     defp read_map_body(parser, opts) do
       extended = Keyword.get(opts, :extended, false)
       widget_builder_scope = Keyword.get(opts, :widget_builder_scope, [])
 
-      results = %{}
-      read_map_body_impl(parser, results, extended, widget_builder_scope)
+      read_map_body_impl(parser, %{}, extended, widget_builder_scope)
     end
 
     defp read_map_body_impl(parser, results, extended, widget_builder_scope) do
       case current_token(parser) do
         %SymbolToken{} ->
-          results
+          {parser, results}
 
         _ ->
-          key = read_key(parser)
+          {parser, key} = read_key(parser)
 
           if Map.has_key?(results, key) do
             raise ParserException.from_token(
@@ -1295,9 +1294,9 @@ defmodule RfwFormats.Text do
                   )
           end
 
-          expect_symbol(parser, SymbolToken.colon())
+          parser = expect_symbol(parser, SymbolToken.colon())
 
-          value =
+          {parser, value} =
             read_value(parser,
               extended: extended,
               null_ok: true,
@@ -1307,10 +1306,10 @@ defmodule RfwFormats.Text do
           results = if value != Model.missing(), do: Map.put(results, key, value), else: results
 
           if found_symbol(parser, SymbolToken.comma()) do
-            advance(parser)
+            parser = advance(parser)
             read_map_body_impl(parser, results, extended, widget_builder_scope)
           else
-            results
+            {parser, results}
           end
       end
     end
@@ -1551,13 +1550,14 @@ defmodule RfwFormats.Text do
 
     defp read_event_handler(parser, widget_builder_scope) do
       start = get_source_location(parser)
-      advance(parser)
-      event_name = read_string(parser)
+      parser = advance(parser)
+      {parser, event_name} = read_string(parser)
 
-      event_arguments =
+      {parser, event_arguments} =
         read_map(parser, extended: true, widget_builder_scope: widget_builder_scope)
 
-      with_source_range(parser, Model.new_event_handler(event_name, event_arguments), start)
+      event_handler = Model.new_event_handler(event_name, event_arguments)
+      {parser, with_source_range(parser, event_handler, start)}
     end
 
     defp read_args_reference(parser) do
@@ -1624,14 +1624,15 @@ defmodule RfwFormats.Text do
 
     defp read_constructor_call(parser, widget_builder_scope) do
       start = get_source_location(parser)
-      name = read_identifier(parser)
-      expect_symbol(parser, SymbolToken.open_paren())
+      {parser, name} = read_identifier(parser)
+      parser = expect_symbol(parser, SymbolToken.open_paren())
 
-      arguments =
+      {parser, arguments} =
         read_map_body(parser, extended: true, widget_builder_scope: widget_builder_scope)
 
-      expect_symbol(parser, SymbolToken.close_paren())
-      with_source_range(parser, Model.new_constructor_call(name, arguments), start)
+      parser = expect_symbol(parser, SymbolToken.close_paren())
+      constructor_call = Model.new_constructor_call(name, arguments)
+      {parser, with_source_range(parser, constructor_call, start)}
     end
 
     defp read_widget_builder_declaration(parser, opts) do
@@ -1754,7 +1755,9 @@ defmodule RfwFormats.Text do
     defp expect_identifier(parser, value) do
       case current_token(parser) do
         %IdentifierToken{value: ^value} ->
-          advance(parser)
+          parser = advance(parser)
+          # Return the updated parser
+          parser
 
         _ ->
           raise ParserException.expected(value, current_token(parser))
