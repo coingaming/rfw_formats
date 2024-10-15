@@ -107,18 +107,25 @@ defmodule RfwFormats.Text do
             start: integer(),
             end: integer()
           }
-    defstruct [:line, :column, :start, :end]
+    defstruct line: 0, column: 0, start: 0, end: 0
 
     def to_string(_), do: "<EOF>"
   end
 
   defmodule ParserException do
-    @type t :: %__MODULE__{
-            message: String.t(),
-            line: integer(),
-            column: integer()
-          }
-    defstruct [:message, :line, :column]
+    defexception [:message, :line, :column]
+
+    def exception(attrs) do
+      %__MODULE__{
+        message: attrs[:message],
+        line: attrs[:line],
+        column: attrs[:column]
+      }
+    end
+
+    def message(%__MODULE__{message: message, line: line, column: column}) do
+      "#{message} at line #{line} column #{column}."
+    end
 
     def new(message, line, column) do
       %__MODULE__{message: message, line: line, column: column}
@@ -134,10 +141,6 @@ defmodule RfwFormats.Text do
 
     def unexpected(token) do
       new("Unexpected #{Kernel.to_string(token)}", token.line, token.column)
-    end
-
-    def to_string(%__MODULE__{message: message, line: line, column: column}) do
-      "#{message} at line #{line} column #{column}."
     end
   end
 
@@ -181,6 +184,7 @@ defmodule RfwFormats.Text do
   @spec parse_data_file(String.t()) :: Model.dynamic_map()
   def parse_data_file(file) do
     parser = __MODULE__.Parser.new(tokenize(file), nil)
+    IO.inspect(parser, label: "Tokens")
     __MODULE__.Parser.read_data_file(parser)
   end
 
@@ -282,7 +286,7 @@ defmodule RfwFormats.Text do
 
   def tokenize(file) do
     characters = String.to_charlist(file)
-    tokenize_impl(characters, 0, 1, 0, [], [], :main, [])
+    tokenize_impl(characters, 0, 1, 1, [], [], :main, [])
   end
 
   defp tokenize_impl(chars, index, line, column, buffer, buffer2, mode, tokens) do
@@ -1206,7 +1210,15 @@ defmodule RfwFormats.Text do
             raise ParserException.new("Unexpected end of file in block comment", line, column)
 
           _ ->
-            tokens
+            tokens ++
+              [
+                %EofToken{
+                  line: line,
+                  column: column,
+                  start: index,
+                  end: index
+                }
+              ]
         end
     end
   end
@@ -1719,8 +1731,12 @@ defmodule RfwFormats.Text do
 
     # Helper functions
 
-    defp current_token(parser) do
-      hd(parser.source)
+    defp current_token(%{source: []}) do
+      %EofToken{line: 0, column: 0, start: 0, end: 0}
+    end
+
+    defp current_token(%{source: [token | _]}) do
+      token
     end
 
     defp advance(parser) do
