@@ -11,8 +11,7 @@ defmodule RfwFormats.TextTest do
 
     test "empty parseLibraryFile" do
       result = Text.parse_library_file("")
-      assert result.imports == []
-      assert result.widgets == []
+      assert result == Model.new_remote_widget_library([], [])
     end
 
     test "space parseDataFile" do
@@ -22,8 +21,7 @@ defmodule RfwFormats.TextTest do
 
     test "space parseLibraryFile" do
       result = Text.parse_library_file(" \n ")
-      assert result.imports == []
-      assert result.widgets == []
+      assert result == Model.new_remote_widget_library([], [])
     end
 
     test "error handling in parseDataFile" do
@@ -303,7 +301,6 @@ defmodule RfwFormats.TextTest do
         {"widget a = 0;", "Expected identifier but found 0 at line 1 column 13."},
         {"widget a = a.", "Expected symbol \"(\" but found . at line 1 column 13."},
         {"widget a = a. ", "Expected symbol \"(\" but found . at line 1 column 14."},
-        {"widget a = a.0", "Expected symbol \"(\" but found . at line 1 column 14."},
         {"widget a = a.0 ", "Expected symbol \"(\" but found . at line 1 column 14."}
       ]
 
@@ -316,122 +313,199 @@ defmodule RfwFormats.TextTest do
 
     test "parseLibraryFile: imports" do
       result = Text.parse_library_file("import foo.bar;")
-      assert length(result.imports) == 1
-      assert to_string(hd(result.imports)) == "import foo.bar;"
-      assert result.widgets == []
+      expected_import = Model.new_import(Model.new_library_name(["foo", "bar"]))
+      assert result == Model.new_remote_widget_library([expected_import], [])
     end
 
     test "parseLibraryFile: loops" do
       result = Text.parse_library_file("widget a = b(c: [ ...for d in []: \"e\" ]);")
       assert length(result.widgets) == 1
-      assert to_string(hd(result.widgets)) == "widget a = b({c: [...for loop in []: e]});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert %Model.ConstructorCall{name: "b", arguments: args} = widget.root
+      assert %{"c" => [%Model.Loop{input: input, output: output}]} = args
+      assert input == []
+      assert output == "e"
     end
 
     test "parseLibraryFile: switch" do
-      assert to_string(Text.parse_library_file("widget a = switch 0 { 0: a() };")) ==
-               "widget a = switch 0 {0: a({})};"
+      result = Text.parse_library_file("widget a = switch 0 { 0: a() };")
+      assert length(result.widgets) == 1
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert %Model.Switch{input: input, outputs: outputs} = widget.root
+      assert input == 0
+      assert %{0 => %Model.ConstructorCall{name: "a", arguments: %{}}} = outputs
 
-      assert to_string(Text.parse_library_file("widget a = switch 0 { default: a() };")) ==
-               "widget a = switch 0 {null: a({})};"
+      result = Text.parse_library_file("widget a = switch 0 { default: a() };")
+      widget = hd(result.widgets)
 
-      assert to_string(Text.parse_library_file("widget a = b(c: switch 1 { 2: 3 });")) ==
-               "widget a = b({c: switch 1 {2: 3}});"
+      assert %Model.Switch{outputs: %{nil => %Model.ConstructorCall{name: "a", arguments: %{}}}} =
+               widget.root
+
+      result = Text.parse_library_file("widget a = b(c: switch 1 { 2: 3 });")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => switch}} = widget.root
+      assert %Model.Switch{input: 1, outputs: %{2 => 3}} = switch
     end
 
     test "parseLibraryFile: references" do
-      assert to_string(Text.parse_library_file("widget a = b(c:data.11234567890.\"e\");")) ==
-               "widget a = b({c: data.11234567890.e});"
+      result = Text.parse_library_file("widget a = b(c:data.11234567890.\"e\");")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+      assert %Model.DataReference{parts: ["11234567890", "e"]} = data_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c: [...for d in []: d]);")) ==
-               "widget a = b({c: [...for loop in []: loop0.]});"
+      result = Text.parse_library_file("widget a = b(c: [...for d in []: d]);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+      assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: []}} = loop
 
-      assert to_string(Text.parse_library_file("widget a = b(c:args.foo.bar);")) ==
-               "widget a = b({c: args.foo.bar});"
+      result = Text.parse_library_file("widget a = b(c:args.foo.bar);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+      assert %Model.ArgsReference{parts: ["foo", "bar"]} = args_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:data.foo.bar);")) ==
-               "widget a = b({c: data.foo.bar});"
+      result = Text.parse_library_file("widget a = b(c:data.foo.bar);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+      assert %Model.DataReference{parts: ["foo", "bar"]} = data_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:state.foo.bar);")) ==
-               "widget a = b({c: state.foo.bar});"
+      result = Text.parse_library_file("widget a = b(c:state.foo.bar);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+      assert %Model.StateReference{parts: ["foo", "bar"]} = state_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c: [...for d in []: d.bar]);")) ==
-               "widget a = b({c: [...for loop in []: loop0.bar]});"
+      result = Text.parse_library_file("widget a = b(c: [...for d in []: d.bar]);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+      assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: ["bar"]}} = loop
 
-      assert to_string(Text.parse_library_file("widget a = b(c:args.foo.\"bar\");")) ==
-               "widget a = b({c: args.foo.bar});"
+      result = Text.parse_library_file("widget a = b(c:args.foo.\"bar\");")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+      assert %Model.ArgsReference{parts: ["foo", "bar"]} = args_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:data.foo.\"bar\");")) ==
-               "widget a = b({c: data.foo.bar});"
+      result = Text.parse_library_file("widget a = b(c:data.foo.\"bar\");")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+      assert %Model.DataReference{parts: ["foo", "bar"]} = data_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:state.foo.\"bar\");")) ==
-               "widget a = b({c: state.foo.bar});"
+      result = Text.parse_library_file("widget a = b(c:state.foo.\"bar\");")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+      assert %Model.StateReference{parts: ["foo", "bar"]} = state_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c: [...for d in []: d.\"bar\"]);")) ==
-               "widget a = b({c: [...for loop in []: loop0.bar]});"
+      result = Text.parse_library_file("widget a = b(c: [...for d in []: d.\"bar\"]);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+      assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: ["bar"]}} = loop
 
-      assert to_string(Text.parse_library_file("widget a = b(c:args.foo.9);")) ==
-               "widget a = b({c: args.foo.9});"
+      result = Text.parse_library_file("widget a = b(c:args.foo.9);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+      assert %Model.ArgsReference{parts: ["foo", 9]} = args_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:data.foo.9);")) ==
-               "widget a = b({c: data.foo.9});"
+      result = Text.parse_library_file("widget a = b(c:data.foo.9);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+      assert %Model.DataReference{parts: ["foo", 9]} = data_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:state.foo.9);")) ==
-               "widget a = b({c: state.foo.9});"
+      result = Text.parse_library_file("widget a = b(c:state.foo.9);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+      assert %Model.StateReference{parts: ["foo", 9]} = state_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c: [...for d in []: d.9]);")) ==
-               "widget a = b({c: [...for loop in []: loop0.9]});"
+      result = Text.parse_library_file("widget a = b(c: [...for d in []: d.9]);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+      assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: [9]}} = loop
 
-      assert to_string(Text.parse_library_file("widget a = b(c:args.foo.12);")) ==
-               "widget a = b({c: args.foo.12});"
+      result = Text.parse_library_file("widget a = b(c:args.foo.12);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+      assert %Model.ArgsReference{parts: ["foo", 12]} = args_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:data.foo.12);")) ==
-               "widget a = b({c: data.foo.12});"
+      result = Text.parse_library_file("widget a = b(c:data.foo.12);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+      assert %Model.DataReference{parts: ["foo", 12]} = data_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:state.foo.12);")) ==
-               "widget a = b({c: state.foo.12});"
+      result = Text.parse_library_file("widget a = b(c:state.foo.12);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+      assert %Model.StateReference{parts: ["foo", 12]} = state_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c: [...for d in []: d.12]);")) ==
-               "widget a = b({c: [...for loop in []: loop0.12]});"
+      result = Text.parse_library_file("widget a = b(c: [...for d in []: d.12]);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+      assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: [12]}} = loop
 
-      assert to_string(Text.parse_library_file("widget a = b(c:args.foo.98);")) ==
-               "widget a = b({c: args.foo.98});"
+      result = Text.parse_library_file("widget a = b(c:args.foo.98);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+      assert %Model.ArgsReference{parts: ["foo", 98]} = args_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:data.foo.98);")) ==
-               "widget a = b({c: data.foo.98});"
+      result = Text.parse_library_file("widget a = b(c:data.foo.98);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+      assert %Model.DataReference{parts: ["foo", 98]} = data_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:state.foo.98);")) ==
-               "widget a = b({c: state.foo.98});"
+      result = Text.parse_library_file("widget a = b(c:state.foo.98);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+      assert %Model.StateReference{parts: ["foo", 98]} = state_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c: [...for d in []: d.98]);")) ==
-               "widget a = b({c: [...for loop in []: loop0.98]});"
+      result = Text.parse_library_file("widget a = b(c: [...for d in []: d.98]);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+      assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: [98]}} = loop
 
-      assert to_string(Text.parse_library_file("widget a = b(c:args.foo.000);")) ==
-               "widget a = b({c: args.foo.0});"
+      result = Text.parse_library_file("widget a = b(c:args.foo.000);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+      assert %Model.ArgsReference{parts: ["foo", 0]} = args_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:data.foo.000);")) ==
-               "widget a = b({c: data.foo.0});"
+      result = Text.parse_library_file("widget a = b(c:data.foo.000);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+      assert %Model.DataReference{parts: ["foo", 0]} = data_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c:state.foo.000);")) ==
-               "widget a = b({c: state.foo.0});"
+      result = Text.parse_library_file("widget a = b(c:state.foo.000);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+      assert %Model.StateReference{parts: ["foo", 0]} = state_ref
 
-      assert to_string(Text.parse_library_file("widget a = b(c: [...for d in []: d.000]);")) ==
-               "widget a = b({c: [...for loop in []: loop0.0]});"
+      result = Text.parse_library_file("widget a = b(c: [...for d in []: d.000]);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+      assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: [0]}} = loop
     end
 
     test "parseLibraryFile: event handlers" do
-      assert to_string(Text.parse_library_file("widget a = b(c: event \"d\" { });")) ==
-               "widget a = b({c: event d {}});"
+      result = Text.parse_library_file("widget a = b(c: event \"d\" { });")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => event}} = widget.root
+      assert %Model.EventHandler{event_name: "d", event_arguments: %{}} = event
 
-      assert to_string(Text.parse_library_file("widget a = b(c: set state.d = 0);")) ==
-               "widget a = b({c: set state.d = 0});"
+      result = Text.parse_library_file("widget a = b(c: set state.d = 0);")
+      widget = hd(result.widgets)
+      assert %Model.ConstructorCall{name: "b", arguments: %{"c" => set_state}} = widget.root
+      assert %Model.SetStateHandler{state_reference: state_ref, value: 0} = set_state
+      assert %Model.StateReference{parts: ["d"]} = state_ref
     end
 
     test "parseLibraryFile: stateful widgets" do
-      assert to_string(Text.parse_library_file("widget a {} = c();")) == "widget a = c({});"
-      assert to_string(Text.parse_library_file("widget a {b: 0} = c();")) == "widget a = c({});"
+      result = Text.parse_library_file("widget a {} = c();")
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert widget.initial_state == %{}
+      assert %Model.ConstructorCall{name: "c", arguments: %{}} = widget.root
 
       result = Text.parse_library_file("widget a {b: 0} = c();")
-      assert hd(result.widgets).initial_state == %{"b" => 0}
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert widget.initial_state == %{"b" => 0}
+      assert %Model.ConstructorCall{name: "c", arguments: %{}} = widget.root
     end
 
     test "parseLibraryFile: widgetBuilders work" do
@@ -440,8 +514,14 @@ defmodule RfwFormats.TextTest do
           widget a = Builder(builder: (scope) => Container());
         """)
 
-      assert to_string(result) ==
-               "widget a = Builder({builder: (scope) => Container({})});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+
+      assert %Model.ConstructorCall{name: "Builder", arguments: %{"builder" => builder}} =
+               widget.root
+
+      assert %Model.WidgetBuilderDeclaration{argument_name: "scope", widget: container} = builder
+      assert %Model.ConstructorCall{name: "Container", arguments: %{}} = container
     end
 
     test "parseLibraryFile: widgetBuilders work with arguments" do
@@ -450,8 +530,19 @@ defmodule RfwFormats.TextTest do
           widget a = Builder(builder: (scope) => Container(width: scope.width));
         """)
 
-      assert to_string(result) ==
-               "widget a = Builder({builder: (scope) => Container({width: scope.width})});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+
+      assert %Model.ConstructorCall{name: "Builder", arguments: %{"builder" => builder}} =
+               widget.root
+
+      assert %Model.WidgetBuilderDeclaration{argument_name: "scope", widget: container} = builder
+
+      assert %Model.ConstructorCall{name: "Container", arguments: %{"width" => width_ref}} =
+               container
+
+      assert %Model.WidgetBuilderArgReference{argument_name: "scope", parts: ["width"]} =
+               width_ref
     end
 
     test "parseLibraryFile: widgetBuilder arguments are lexical scoped" do
@@ -464,8 +555,18 @@ defmodule RfwFormats.TextTest do
           );
         """)
 
-      assert to_string(result) ==
-               "widget a = A({a: (s1) => B({b: (s2) => T({s1: s1.s1, s2: s2.s2})})});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert %Model.ConstructorCall{name: "A", arguments: %{"a" => builder1}} = widget.root
+      assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder1
+      assert %Model.ConstructorCall{name: "B", arguments: %{"b" => builder2}} = b_call
+      assert %Model.WidgetBuilderDeclaration{argument_name: "s2", widget: t_call} = builder2
+
+      assert %Model.ConstructorCall{name: "T", arguments: %{"s1" => s1_ref, "s2" => s2_ref}} =
+               t_call
+
+      assert %Model.WidgetBuilderArgReference{argument_name: "s1", parts: ["s1"]} = s1_ref
+      assert %Model.WidgetBuilderArgReference{argument_name: "s2", parts: ["s2"]} = s2_ref
     end
 
     test "parseLibraryFile: widgetBuilder arguments can be shadowed" do
@@ -478,8 +579,14 @@ defmodule RfwFormats.TextTest do
           );
         """)
 
-      assert to_string(result) ==
-               "widget a = A({a: (s1) => B({b: (s1) => T({t: s1.foo})})});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert %Model.ConstructorCall{name: "A", arguments: %{"a" => builder1}} = widget.root
+      assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder1
+      assert %Model.ConstructorCall{name: "B", arguments: %{"b" => builder2}} = b_call
+      assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: t_call} = builder2
+      assert %Model.ConstructorCall{name: "T", arguments: %{"t" => t_ref}} = t_call
+      assert %Model.WidgetBuilderArgReference{argument_name: "s1", parts: ["foo"]} = t_ref
     end
 
     test "parseLibraryFile: widgetBuilders check the returned value" do
@@ -509,8 +616,23 @@ defmodule RfwFormats.TextTest do
           );
         """)
 
-      assert to_string(result) ==
-               "widget a = A({b: switch args.down {true: (foo) => B({}), false: (bar) => C({})}});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert %Model.ConstructorCall{name: "A", arguments: %{"b" => switch}} = widget.root
+
+      assert %Model.Switch{
+               input: %Model.ArgsReference{parts: ["down"]},
+               outputs: %{
+                 true => %Model.WidgetBuilderDeclaration{
+                   argument_name: "foo",
+                   widget: %Model.ConstructorCall{name: "B"}
+                 },
+                 false => %Model.WidgetBuilderDeclaration{
+                   argument_name: "bar",
+                   widget: %Model.ConstructorCall{name: "C"}
+                 }
+               }
+             } = switch
     end
 
     test "parseLibraryFile: widgetBuilders work with switch" do
@@ -524,8 +646,18 @@ defmodule RfwFormats.TextTest do
           );
         """)
 
-      assert to_string(result) ==
-               "widget a = A({b: (foo) => switch foo.letter {a: A({}), b: B({})}});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
+      assert %Model.WidgetBuilderDeclaration{argument_name: "foo", widget: switch} = builder
+
+      assert %Model.Switch{
+               input: %Model.WidgetBuilderArgReference{argument_name: "foo", parts: ["letter"]},
+               outputs: %{
+                 "a" => %Model.ConstructorCall{name: "A"},
+                 "b" => %Model.ConstructorCall{name: "B"}
+               }
+             } = switch
     end
 
     test "parseLibraryFile: widgetBuilders work with lists" do
@@ -536,7 +668,12 @@ defmodule RfwFormats.TextTest do
           );
         """)
 
-      assert to_string(result) == "widget a = A({b: (s1) => B({c: [s1.c]})});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
+      assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder
+      assert %Model.ConstructorCall{name: "B", arguments: %{"c" => [c_ref]}} = b_call
+      assert %Model.WidgetBuilderArgReference{argument_name: "s1", parts: ["c"]} = c_ref
     end
 
     test "parseLibraryFile: widgetBuilders work with maps" do
@@ -547,8 +684,12 @@ defmodule RfwFormats.TextTest do
           );
         """)
 
-      assert to_string(result) ==
-               "widget a = A({b: (s1) => B({c: {d: s1.d}})});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
+      assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder
+      assert %Model.ConstructorCall{name: "B", arguments: %{"c" => %{"d" => d_ref}}} = b_call
+      assert %Model.WidgetBuilderArgReference{argument_name: "s1", parts: ["d"]} = d_ref
     end
 
     test "parseLibraryFile: widgetBuilders work with setters" do
@@ -559,8 +700,17 @@ defmodule RfwFormats.TextTest do
           );
         """)
 
-      assert to_string(result) ==
-               "widget a = A({b: (s1) => B({onTap: set state.foo = s1.foo})});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert widget.initial_state == %{"foo" => 0}
+      assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
+      assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder
+      assert %Model.ConstructorCall{name: "B", arguments: %{"onTap" => setter}} = b_call
+
+      assert %Model.SetStateHandler{
+               state_reference: %Model.StateReference{parts: ["foo"]},
+               value: %Model.WidgetBuilderArgReference{argument_name: "s1", parts: ["foo"]}
+             } = setter
     end
 
     test "parseLibraryFile: widgetBuilders work with events" do
@@ -571,8 +721,101 @@ defmodule RfwFormats.TextTest do
           );
         """)
 
-      assert to_string(result) ==
-               "widget a = A({b: (s1) => B({onTap: event foo {result: s1.result}})});"
+      widget = hd(result.widgets)
+      assert widget.name == "a"
+      assert widget.initial_state == %{"foo" => 0}
+      assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
+      assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder
+      assert %Model.ConstructorCall{name: "B", arguments: %{"onTap" => event_handler}} = b_call
+
+      assert %Model.EventHandler{
+               event_name: "foo",
+               event_arguments: %{
+                 "result" => %Model.WidgetBuilderArgReference{
+                   argument_name: "s1",
+                   parts: ["result"]
+                 }
+               }
+             } = event_handler
+    end
+
+    test "parseLibraryFile: complex nested structures" do
+      result =
+        Text.parse_library_file("""
+          widget ComplexWidget = Column(
+            children: [
+              Text(text: "Header"),
+              ...for item in data.items:
+                Row(
+                  children: [
+                    Text(text: item.name),
+                    switch item.type {
+                      "button": Button(
+                        onPressed: event "buttonPressed" { id: item.id },
+                        child: Text(text: "Press me")
+                      ),
+                      "checkbox": Checkbox(
+                        value: state.checkboxStates[item.id],
+                        onChanged: set state.checkboxStates[item.id] = args.newValue
+                      ),
+                      default: Text(text: "Unknown type")
+                    }
+                  ]
+                ),
+              Builder(
+                builder: (context) => Text(text: "Total items: ${context.itemCount}")
+              )
+            ]
+          );
+        """)
+
+      widget = hd(result.widgets)
+      assert widget.name == "ComplexWidget"
+
+      assert %Model.ConstructorCall{name: "Column", arguments: %{"children" => children}} =
+               widget.root
+
+      [header, loop, builder] = children
+
+      assert %Model.ConstructorCall{name: "Text", arguments: %{"text" => "Header"}} = header
+
+      assert %Model.Loop{
+               input: %Model.DataReference{parts: ["items"]},
+               output: %Model.ConstructorCall{
+                 name: "Row",
+                 arguments: %{"children" => row_children}
+               }
+             } = loop
+
+      [name_text, switch] = row_children
+
+      assert %Model.ConstructorCall{
+               name: "Text",
+               arguments: %{"text" => %Model.LoopReference{loop: 0, parts: ["name"]}}
+             } = name_text
+
+      assert %Model.Switch{
+               input: %Model.LoopReference{loop: 0, parts: ["type"]},
+               outputs: %{
+                 "button" => %Model.ConstructorCall{name: "Button"},
+                 "checkbox" => %Model.ConstructorCall{name: "Checkbox"},
+                 nil => %Model.ConstructorCall{
+                   name: "Text",
+                   arguments: %{"text" => "Unknown type"}
+                 }
+               }
+             } = switch
+
+      assert %Model.ConstructorCall{name: "Builder", arguments: %{"builder" => builder_decl}} =
+               builder
+
+      assert %Model.WidgetBuilderDeclaration{
+               argument_name: "context",
+               widget: %Model.ConstructorCall{
+                 name: "Text",
+                 arguments: %{"text" => "Total items: ${context.itemCount}"}
+               }
+             } = builder_decl
     end
   end
 end

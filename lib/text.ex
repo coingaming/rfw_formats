@@ -129,16 +129,44 @@ defmodule RfwFormats.Text do
     end
 
     def expected(what, token) do
-      new("Expected #{what} but found #{Token.to_string(token)}", token.line, token.column)
+      new("Expected #{what} but found #{Kernel.to_string(token)}", token.line, token.column)
     end
 
     def unexpected(token) do
-      new("Unexpected #{Token.to_string(token)}", token.line, token.column)
+      new("Unexpected #{Kernel.to_string(token)}", token.line, token.column)
     end
 
     def to_string(%__MODULE__{message: message, line: line, column: column}) do
       "#{message} at line #{line} column #{column}."
     end
+  end
+
+  defimpl String.Chars, for: SymbolToken do
+    def to_string(%SymbolToken{symbol: symbol}), do: <<symbol::utf8>>
+  end
+
+  defimpl String.Chars, for: IntegerToken do
+    def to_string(%IntegerToken{value: value}), do: Integer.to_string(value)
+  end
+
+  defimpl String.Chars, for: DoubleToken do
+    def to_string(%DoubleToken{value: value}), do: Float.to_string(value)
+  end
+
+  defimpl String.Chars, for: IdentifierToken do
+    def to_string(%IdentifierToken{value: value}), do: value
+  end
+
+  defimpl String.Chars, for: StringToken do
+    def to_string(%StringToken{value: value}), do: "\"#{value}\""
+  end
+
+  defimpl String.Chars, for: EofToken do
+    def to_string(_), do: "<EOF>"
+  end
+
+  defimpl String.Chars, for: Token do
+    def to_string(token), do: inspect(token)
   end
 
   @doc """
