@@ -18,9 +18,12 @@ defmodule RfwFormats.Text do
 
   integer =
     optional(ascii_char([?-]))
-    |> ascii_string([?0..?9], min: 1)
+    |> choice([
+      string("0x") |> ascii_string([?0..?9, ?a..?f, ?A..?F], min: 1),
+      ascii_string([?0..?9], min: 1)
+    ])
     |> reduce({List, :to_string, []})
-    |> map({String, :to_integer, []})
+    |> map({:parse_integer, []})
 
   float =
     optional(ascii_char([?-]))
@@ -28,10 +31,7 @@ defmodule RfwFormats.Text do
     |> string(".")
     |> ascii_string([?0..?9], min: 1)
     |> optional(
-      choice([
-        string("e"),
-        string("E")
-      ])
+      choice([string("e"), string("E")])
       |> optional(ascii_char([?+, ?-]))
       |> ascii_string([?0..?9], min: 1)
     )
@@ -44,6 +44,16 @@ defmodule RfwFormats.Text do
       lookahead_not(ascii_char([?"]))
       |> choice([
         string("\\\"") |> replace(?"),
+        string("\\\\") |> replace(?\\),
+        string("\\/") |> replace(?/),
+        string("\\b") |> replace(?\b),
+        string("\\f") |> replace(?\f),
+        string("\\n") |> replace(?\n),
+        string("\\r") |> replace(?\r),
+        string("\\t") |> replace(?\t),
+        string("\\u")
+        |> utf8_string([?0..?9, ?a..?f, ?A..?F], 4)
+        |> map({:parse_unicode_escape, []}),
         utf8_char([])
       ])
     )
@@ -64,7 +74,13 @@ defmodule RfwFormats.Text do
       integer,
       string_literal,
       parsec(:list),
-      parsec(:map)
+      parsec(:map),
+      parsec(:loop),
+      parsec(:args_reference),
+      parsec(:data_reference),
+      parsec(:state_reference),
+      parsec(:event_handler),
+      parsec(:set_state_handler)
     ])
 
   list =
@@ -106,9 +122,81 @@ defmodule RfwFormats.Text do
     |> ignore(string("}"))
     |> reduce({Enum, :into, [%{}]})
 
+  loop =
+    ignore(string("...for"))
+    |> ignore(whitespace)
+    |> concat(identifier)
+    |> ignore(whitespace)
+    |> ignore(string("in"))
+    |> ignore(whitespace)
+    |> parsec(:value)
+    |> ignore(string(":"))
+    |> ignore(whitespace)
+    |> parsec(:value)
+    |> map({:create_loop, []})
+
+  dot_separated_parts =
+    times(
+      ignore(string("."))
+      |> choice([
+        integer,
+        identifier
+      ]),
+      min: 1
+    )
+
+  args_reference =
+    string("args")
+    |> concat(dot_separated_parts)
+    |> map({:create_args_reference, []})
+
+  data_reference =
+    string("data")
+    |> concat(dot_separated_parts)
+    |> map({:create_data_reference, []})
+
+  state_reference =
+    string("state")
+    |> concat(dot_separated_parts)
+    |> map({:create_state_reference, []})
+
+  event_handler =
+    ignore(string("event"))
+    |> ignore(whitespace)
+    |> concat(string_literal)
+    |> ignore(whitespace)
+    |> concat(map)
+    |> map({:create_event_handler, []})
+
+  set_state_handler =
+    ignore(string("set"))
+    |> ignore(whitespace)
+    |> concat(state_reference)
+    |> ignore(whitespace)
+    |> ignore(string("="))
+    |> ignore(whitespace)
+    |> parsec(:value)
+    |> map({:create_set_state_handler, []})
+
+  dot_separated_parts =
+    times(
+      ignore(string("."))
+      |> choice([
+        integer,
+        identifier
+      ]),
+      min: 1
+    )
+
   defcombinatorp(:value, value)
   defcombinatorp(:list, list)
   defcombinatorp(:map, map)
+  defcombinatorp(:loop, loop)
+  defcombinatorp(:args_reference, args_reference)
+  defcombinatorp(:data_reference, data_reference)
+  defcombinatorp(:state_reference, state_reference)
+  defcombinatorp(:event_handler, event_handler)
+  defcombinatorp(:set_state_handler, set_state_handler)
 
   defparsecp(
     :do_parse_data_file,
@@ -248,6 +336,41 @@ defmodule RfwFormats.Text do
 
   defp create_switch([input, outputs]) do
     Model.new_switch(input, Map.new(outputs))
+  end
+
+  defp create_loop([_identifier, input, output]) do
+    Model.new_loop(input, output)
+  end
+
+  defp create_args_reference([_ | parts]) do
+    Model.new_args_reference(parts)
+  end
+
+  defp create_data_reference([_ | parts]) do
+    Model.new_data_reference(parts)
+  end
+
+  defp create_state_reference([_ | parts]) do
+    Model.new_state_reference(parts)
+  end
+
+  defp create_event_handler([event_name, event_arguments]) do
+    Model.new_event_handler(event_name, event_arguments)
+  end
+
+  defp create_set_state_handler([state_reference, value]) do
+    Model.new_set_state_handler(state_reference, value)
+  end
+
+  defp parse_integer(str) do
+    case str do
+      "0x" <> hex -> String.to_integer(hex, 16)
+      _ -> String.to_integer(str)
+    end
+  end
+
+  defp parse_unicode_escape(<<hex::binary-size(4)>>) do
+    <<String.to_integer(hex, 16)::utf8>>
   end
 
   defmodule ParserException do
