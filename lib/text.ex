@@ -28,15 +28,22 @@ defmodule RfwFormats.Text do
   float =
     optional(ascii_char([?-]))
     |> ascii_string([?0..?9], min: 1)
-    |> string(".")
-    |> ascii_string([?0..?9], min: 1)
+    |> optional(
+      string(".")
+      |> ascii_string([?0..?9], min: 1)
+    )
     |> optional(
       choice([string("e"), string("E")])
       |> optional(ascii_char([?+, ?-]))
       |> ascii_string([?0..?9], min: 1)
     )
     |> reduce({List, :to_string, []})
-    |> map({String, :to_float, []})
+    |> map({:parse_float, []})
+
+  defp parse_float(str) do
+    {float, ""} = Float.parse(str)
+    float
+  end
 
   string_literal =
     ignore(ascii_char([?"]))
