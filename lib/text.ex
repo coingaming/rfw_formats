@@ -16,27 +16,23 @@ defmodule RfwFormats.Text do
     |> repeat(ascii_char([?a..?z, ?A..?Z, ?0..?9, ?_]))
     |> reduce({List, :to_string, []})
 
-  integer =
-    optional(ascii_char([?-]))
-    |> choice([
-      string("0x") |> ascii_string([?0..?9, ?a..?f, ?A..?F], min: 1),
-      ascii_string([?0..?9], min: 1)
-    ])
-    |> reduce({List, :to_string, []})
-    |> map({:parse_integer, []})
-
   float =
     optional(ascii_char([?-]))
     |> ascii_string([?0..?9], min: 1)
-    |> optional(
+    |> choice([
+      # Decimal point and fractional part, with optional exponent
       string(".")
       |> ascii_string([?0..?9], min: 1)
-    )
-    |> optional(
+      |> optional(
+        choice([string("e"), string("E")])
+        |> optional(ascii_char([?+, ?-]))
+        |> ascii_string([?0..?9], min: 1)
+      ),
+      # Exponent without decimal point
       choice([string("e"), string("E")])
       |> optional(ascii_char([?+, ?-]))
       |> ascii_string([?0..?9], min: 1)
-    )
+    ])
     |> reduce({List, :to_string, []})
     |> map({:parse_float, []})
 
@@ -44,6 +40,22 @@ defmodule RfwFormats.Text do
     {float, ""} = Float.parse(str)
     float
   end
+
+  integer =
+    optional(ascii_char([?-]))
+    |> concat(
+      choice([
+        string("0x")
+        |> ascii_string([?0..?9, ?a..?f, ?A..?F], min: 1),
+        ascii_string([?0..?9], min: 1)
+        |> lookahead_not(ascii_char([?., ?e, ?E]))
+      ])
+    )
+    |> reduce({List, :to_string, []})
+    |> map({:parse_integer, []})
+
+  defp parse_integer("0x" <> hex), do: String.to_integer(hex, 16)
+  defp parse_integer(str), do: String.to_integer(str)
 
   string_literal =
     ignore(ascii_char([?"]))
@@ -77,8 +89,8 @@ defmodule RfwFormats.Text do
     choice([
       boolean,
       null_literal,
-      float,
       integer,
+      float,
       string_literal,
       parsec(:list),
       parsec(:map),
@@ -381,13 +393,6 @@ defmodule RfwFormats.Text do
 
   defp create_set_state_handler([state_reference, value]) do
     Model.new_set_state_handler(state_reference, value)
-  end
-
-  defp parse_integer(str) do
-    case str do
-      "0x" <> hex -> String.to_integer(hex, 16)
-      _ -> String.to_integer(str)
-    end
   end
 
   defp parse_unicode_escape(<<hex::binary-size(4)>>) do
