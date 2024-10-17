@@ -287,8 +287,9 @@ defmodule RfwFormats.Text do
 
   library =
     ignore(whitespace)
-    |> repeat(import_statement |> ignore(whitespace))
-    |> repeat(widget_declaration |> ignore(whitespace))
+    |> wrap(repeat(import_statement |> ignore(whitespace)))
+    |> wrap(repeat(widget_declaration |> ignore(whitespace)))
+    |> ignore(whitespace)
     |> eos()
 
   defparsecp(:do_parse_library_file, library)
