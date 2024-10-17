@@ -302,8 +302,8 @@ defmodule RfwFormats.Text do
       {:ok, [result], "", _, _, _} ->
         result
 
-      {:error, reason, rest, _, line, col} ->
-        raise __MODULE__.ParserException, {reason, rest, line, col}
+      {:error, reason, rest, _, line, offset} ->
+        raise __MODULE__.ParserException, {reason, rest, line, offset}
     end
   end
 
@@ -315,8 +315,8 @@ defmodule RfwFormats.Text do
       {:ok, [imports, widgets], "", _, _, _} ->
         Model.new_remote_widget_library(imports, widgets)
 
-      {:error, reason, rest, _, line, col} ->
-        raise __MODULE__.ParserException, {reason, rest, line, col}
+      {:error, reason, rest, _, line, offset} ->
+        raise __MODULE__.ParserException, {reason, rest, line, offset}
     end
   end
 
@@ -375,21 +375,23 @@ defmodule RfwFormats.Text do
   end
 
   defmodule ParserException do
-    defexception [:message, :rest, :line, :column]
+    defexception [:message, :rest, :line, :offset]
 
     @impl true
-    def exception({message, rest, line, column}) do
+    def exception({message, rest, line, offset}) do
       %__MODULE__{
         message: message,
         rest: rest,
         line: line,
-        column: column
+        offset: offset
       }
     end
 
     @impl true
-    def message(%{message: message, rest: rest, line: line, column: column}) do
-      "#{message} at line #{line}, column #{column}. Remaining input: #{inspect(rest)}"
+    def message(%{message: message, rest: rest, line: {line_number, line_offset}, offset: offset}) do
+      column = offset - line_offset + 1
+
+      "#{inspect(message)} at line #{line_number}, column #{column}. Remaining input: #{inspect(rest)}"
     end
   end
 end
