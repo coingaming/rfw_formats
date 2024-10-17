@@ -62,7 +62,7 @@ defmodule RfwFormats.Text do
 
   true_literal = string("true") |> replace(true)
   false_literal = string("false") |> replace(false)
-  null_literal = string("null") |> replace(Model.missing())
+  null_literal = string("null") |> replace(:__null__)
 
   boolean = choice([true_literal, false_literal])
 
@@ -80,19 +80,22 @@ defmodule RfwFormats.Text do
       parsec(:data_reference),
       parsec(:state_reference),
       parsec(:event_handler),
-      parsec(:set_state_handler)
+      parsec(:set_state_handler),
+      parsec(:switch)
     ])
 
   list =
     ignore(string("["))
     |> ignore(whitespace)
-    |> optional(
-      parsec(:value)
-      |> repeat(
-        ignore(whitespace)
-        |> ignore(string(","))
-        |> ignore(whitespace)
-        |> parsec(:value)
+    |> wrap(
+      optional(
+        parsec(:value)
+        |> repeat(
+          ignore(whitespace)
+          |> ignore(string(","))
+          |> ignore(whitespace)
+          |> parsec(:value)
+        )
       )
     )
     |> ignore(whitespace)
@@ -101,26 +104,28 @@ defmodule RfwFormats.Text do
   map =
     ignore(string("{"))
     |> ignore(whitespace)
-    |> optional(
-      choice([string_literal, identifier])
-      |> ignore(whitespace)
-      |> ignore(string(":"))
-      |> ignore(whitespace)
-      |> parsec(:value)
-      |> repeat(
-        ignore(whitespace)
-        |> ignore(string(","))
-        |> ignore(whitespace)
-        |> choice([string_literal, identifier])
+    |> wrap(
+      optional(
+        choice([string_literal, identifier])
         |> ignore(whitespace)
         |> ignore(string(":"))
         |> ignore(whitespace)
         |> parsec(:value)
+        |> repeat(
+          ignore(whitespace)
+          |> ignore(string(","))
+          |> ignore(whitespace)
+          |> choice([string_literal, identifier])
+          |> ignore(whitespace)
+          |> ignore(string(":"))
+          |> ignore(whitespace)
+          |> parsec(:value)
+        )
       )
     )
     |> ignore(whitespace)
     |> ignore(string("}"))
-    |> reduce({Enum, :into, [%{}]})
+    |> map({:create_map, []})
 
   loop =
     ignore(string("...for"))
@@ -178,15 +183,27 @@ defmodule RfwFormats.Text do
     |> parsec(:value)
     |> map({:create_set_state_handler, []})
 
-  dot_separated_parts =
-    times(
-      ignore(string("."))
-      |> choice([
-        integer,
-        identifier
-      ]),
+  switch =
+    ignore(string("switch"))
+    |> ignore(whitespace)
+    |> parsec(:value)
+    |> ignore(whitespace)
+    |> ignore(string("{"))
+    |> ignore(whitespace)
+    |> times(
+      choice([
+        ignore(string("default"))
+        |> replace(nil),
+        parsec(:value)
+      ])
+      |> ignore(string(":"))
+      |> ignore(whitespace)
+      |> parsec(:value)
+      |> ignore(whitespace),
       min: 1
     )
+    |> ignore(string("}"))
+    |> map({:create_switch, []})
 
   defcombinatorp(:value, value)
   defcombinatorp(:list, list)
@@ -197,6 +214,7 @@ defmodule RfwFormats.Text do
   defcombinatorp(:state_reference, state_reference)
   defcombinatorp(:event_handler, event_handler)
   defcombinatorp(:set_state_handler, set_state_handler)
+  defcombinatorp(:switch, switch)
 
   defparsecp(
     :do_parse_data_file,
@@ -231,7 +249,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> choice([
       parsec(:constructor_call),
-      parsec(:switch_statement)
+      parsec(:switch)
     ])
     |> ignore(string(";"))
     |> map({:create_widget_declaration, []})
@@ -259,31 +277,8 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> parsec(:value)
 
-  switch_statement =
-    ignore(string("switch"))
-    |> ignore(whitespace)
-    |> parsec(:value)
-    |> ignore(whitespace)
-    |> ignore(string("{"))
-    |> ignore(whitespace)
-    |> times(
-      choice([
-        ignore(string("default"))
-        |> replace(nil),
-        parsec(:value)
-      ])
-      |> ignore(string(":"))
-      |> ignore(whitespace)
-      |> parsec(:value)
-      |> ignore(whitespace),
-      min: 1
-    )
-    |> ignore(string("}"))
-    |> map({:create_switch, []})
-
   defcombinatorp(:constructor_call, constructor_call)
   defcombinatorp(:constructor_argument, constructor_argument)
-  defcombinatorp(:switch_statement, switch_statement)
 
   library =
     ignore(whitespace)
@@ -297,30 +292,48 @@ defmodule RfwFormats.Text do
   @doc """
   Parse a Remote Flutter Widgets text data file.
   """
+  @spec parse_data_file(binary()) :: Model.dynamic_map() | no_return()
   def parse_data_file(input) do
     case do_parse_data_file(input) do
-      {:ok, [result], "", _, _, _} ->
+      {:ok, [result], "", _, {_, _}, _} ->
         result
 
-      {:error, reason, rest, _, line, offset} ->
-        raise __MODULE__.ParserException, {reason, rest, line, offset}
+      {:error, reason, rest, _, {line, col}, _} ->
+        raise __MODULE__.ParserException, {reason, rest, line, col}
+
+      other ->
+        raise __MODULE__.ParserException, {"Unexpected parser result", inspect(other), 0, 0}
     end
   end
 
   @doc """
   Parses a Remote Flutter Widgets text library file.
   """
+  @spec parse_library_file(binary(), keyword()) :: Model.RemoteWidgetLibrary.t() | no_return()
   def parse_library_file(input, _opts \\ []) do
     case do_parse_library_file(input) do
-      {:ok, [imports, widgets], "", _, _, _} ->
+      {:ok, [imports, widgets], "", _, {_, _}, _} ->
         Model.new_remote_widget_library(imports, widgets)
 
-      {:error, reason, rest, _, line, offset} ->
-        raise __MODULE__.ParserException, {reason, rest, line, offset}
+      {:error, reason, rest, _, {line, col}, _} ->
+        raise __MODULE__.ParserException, {reason, rest, line, col}
+
+      other ->
+        raise __MODULE__.ParserException, {"Unexpected parser result", inspect(other), 0, 0}
     end
   end
 
   # Helper functions to create Model structs
+
+  defp create_map([]), do: %{}
+
+  defp create_map(pairs) do
+    Enum.chunk_every(pairs, 2)
+    |> Enum.reduce(%{}, fn
+      [_k, :__null__], acc -> acc
+      [k, v], acc -> Map.put(acc, k, v)
+    end)
+  end
 
   defp create_import(parts) do
     library_name = Model.new_library_name(String.split(parts, "."))
@@ -331,12 +344,12 @@ defmodule RfwFormats.Text do
     Model.new_widget_declaration(name, initial_state || %{}, root)
   end
 
-  defp create_constructor_call([name, arguments]) do
-    Model.new_constructor_call(name, arguments || %{})
+  defp create_constructor_call([name | arguments]) do
+    Model.new_constructor_call(name, create_map(arguments))
   end
 
-  defp create_switch([input, outputs]) do
-    Model.new_switch(input, Map.new(outputs))
+  defp create_switch([input | cases]) do
+    Model.new_switch(input, create_map(cases))
   end
 
   defp create_loop([_identifier, input, output]) do
@@ -375,23 +388,21 @@ defmodule RfwFormats.Text do
   end
 
   defmodule ParserException do
-    defexception [:message, :rest, :line, :offset]
+    defexception [:message, :rest, :line, :column]
 
     @impl true
-    def exception({message, rest, line, offset}) do
+    def exception({message, rest, line, column}) do
       %__MODULE__{
         message: message,
         rest: rest,
         line: line,
-        offset: offset
+        column: column
       }
     end
 
     @impl true
-    def message(%{message: message, rest: rest, line: {line_number, line_offset}, offset: offset}) do
-      column = offset - line_offset + 1
-
-      "#{inspect(message)} at line #{line_number}, column #{column}. Remaining input: #{inspect(rest)}"
+    def message(%{message: message, rest: rest, line: line, column: column}) do
+      "#{inspect(message)} at line #{line}, column #{column}. Remaining input: #{inspect(rest)}"
     end
   end
 end
