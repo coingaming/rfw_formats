@@ -224,8 +224,8 @@ defmodule RfwFormats.TextTest do
       assert Text.parse_data_file("{ \"a\": 0xfd }") == %{"a" => 253}
       assert Text.parse_data_file("{ \"a\": 0xfe }") == %{"a" => 254}
 
-      assert Text.parse_data_file("{ \"a\": \"\\\"\\/\\'\\\b\\\f\\\n\\\r\\\t\\\\\" }") == %{
-               "a" => "\"\/'\\b\\f\\n\\r\\t\\"
+      assert Text.parse_data_file(~s({ "a": "\\\"\\/\\'\\b\\f\\n\\r\\t\\\\" })) == %{
+               "a" => "\"/'\b\f\n\r\t\\"
              }
 
       assert Text.parse_data_file("{ \"a\": '\\\"\\/\\\'\\b\\f\\n\\r\\t\\\\' }") == %{

@@ -65,6 +65,7 @@ defmodule RfwFormats.Text do
         string("\\\"") |> replace(?"),
         string("\\\\") |> replace(?\\),
         string("\\/") |> replace(?/),
+        string("\\'") |> replace(?'),
         string("\\b") |> replace(?\b),
         string("\\f") |> replace(?\f),
         string("\\n") |> replace(?\n),
