@@ -57,7 +57,7 @@ defmodule RfwFormats.Text do
   defp parse_integer("0x" <> hex), do: String.to_integer(hex, 16)
   defp parse_integer(str), do: String.to_integer(str)
 
-  string_literal =
+  double_string_literal =
     ignore(ascii_char([?"]))
     |> repeat(
       lookahead_not(ascii_char([?"]))
@@ -79,6 +79,36 @@ defmodule RfwFormats.Text do
     )
     |> ignore(ascii_char([?"]))
     |> reduce({List, :to_string, []})
+
+  single_string_literal =
+    ignore(ascii_char([?']))
+    |> repeat(
+      lookahead_not(ascii_char([?']))
+      |> choice([
+        string("\\\"") |> replace(?"),
+        string("\\\\") |> replace(?\\),
+        string("\\/") |> replace(?/),
+        string("\\'") |> replace(?'),
+        string("\\b") |> replace(?\b),
+        string("\\f") |> replace(?\f),
+        string("\\n") |> replace(?\n),
+        string("\\r") |> replace(?\r),
+        string("\\t") |> replace(?\t),
+        string("\\u")
+        |> utf8_string([?0..?9, ?a..?f, ?A..?F], 4)
+        |> map({:parse_unicode_escape, []}),
+        utf8_char([])
+      ])
+    )
+    |> ignore(ascii_char([?']))
+    |> reduce({List, :to_string, []})
+
+  # Combined String Literal Combinator
+  string_literal =
+    choice([
+      double_string_literal,
+      single_string_literal
+    ])
 
   true_literal = string("true") |> replace(true)
   false_literal = string("false") |> replace(false)
