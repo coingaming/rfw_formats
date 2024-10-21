@@ -232,29 +232,29 @@ defmodule RfwFormats.TextTest do
                "a" => "\"/'\b\f\n\r\t\\"
              }
 
-      assert Text.parse_data_file("{ \"a\": '\\u263A' }") == %{"a" => "☺"}
-      assert Text.parse_data_file("{ \"a\": '\\u0000' }") == %{"a" => <<0>>}
-      assert Text.parse_data_file("{ \"a\": '\\u1111' }") == %{"a" => "ᄑ"}
-      assert Text.parse_data_file("{ \"a\": '\\u2222' }") == %{"a" => "∢"}
-      assert Text.parse_data_file("{ \"a\": '\\u3333' }") == %{"a" => "㌳"}
-      assert Text.parse_data_file("{ \"a\": '\\u4444' }") == %{"a" => "䑄"}
-      assert Text.parse_data_file("{ \"a\": '\\u5555' }") == %{"a" => "啕"}
-      assert Text.parse_data_file("{ \"a\": '\\u6666' }") == %{"a" => "晦"}
-      assert Text.parse_data_file("{ \"a\": '\\u7777' }") == %{"a" => "睷"}
-      assert Text.parse_data_file("{ \"a\": '\\u8888' }") == %{"a" => "袈"}
-      assert Text.parse_data_file("{ \"a\": '\\u9999' }") == %{"a" => "香"}
-      assert Text.parse_data_file("{ \"a\": '\\uaaaa' }") == %{"a" => "ꪪ"}
-      assert Text.parse_data_file("{ \"a\": '\\ubbbb' }") == %{"a" => "뮻"}
-      assert Text.parse_data_file("{ \"a\": '\\ucccc' }") == %{"a" => "쳌"}
-      assert Text.parse_data_file("{ \"a\": '\\udddd' }") == %{"a" => <<0xDD, 0xDD::utf8>>}
-      assert Text.parse_data_file("{ \"a\": '\\ueeee' }") == %{"a" => <<0xEE, 0xEE::utf8>>}
-      assert Text.parse_data_file("{ \"a\": '\\uffff' }") == %{"a" => <<0xFF, 0xFF::utf8>>}
-      assert Text.parse_data_file("{ \"a\": '\\uAAAA' }") == %{"a" => "ꪪ"}
-      assert Text.parse_data_file("{ \"a\": '\\uBBBB' }") == %{"a" => "뮻"}
-      assert Text.parse_data_file("{ \"a\": '\\uCCCC' }") == %{"a" => "쳌"}
-      assert Text.parse_data_file("{ \"a\": '\\uDDDD' }") == %{"a" => <<0xDD, 0xDD::utf8>>}
-      assert Text.parse_data_file("{ \"a\": '\\uEEEE' }") == %{"a" => <<0xEE, 0xEE::utf8>>}
-      assert Text.parse_data_file("{ \"a\": '\\uFFFF' }") == %{"a" => <<0xFF, 0xFF::utf8>>}
+      assert Text.parse_data_file("{ \"a\": \"\\u263A\" }") == %{"a" => "☺"}
+      assert Text.parse_data_file("{ \"a\": \"\\u0000\" }") == %{"a" => <<0>>}
+      assert Text.parse_data_file("{ \"a\": \"\\u1111\" }") == %{"a" => "ᄑ"}
+      assert Text.parse_data_file("{ \"a\": \"\\u2222\" }") == %{"a" => "∢"}
+      assert Text.parse_data_file("{ \"a\": \"\\u3333\" }") == %{"a" => "㌳"}
+      assert Text.parse_data_file("{ \"a\": \"\\u4444\" }") == %{"a" => "䑄"}
+      assert Text.parse_data_file("{ \"a\": \"\\u5555\" }") == %{"a" => "啕"}
+      assert Text.parse_data_file("{ \"a\": \"\\u6666\" }") == %{"a" => "晦"}
+      assert Text.parse_data_file("{ \"a\": \"\\u7777\" }") == %{"a" => "睷"}
+      assert Text.parse_data_file("{ \"a\": \"\\u8888\" }") == %{"a" => "袈"}
+      assert Text.parse_data_file("{ \"a\": \"\\u9999\" }") == %{"a" => "香"}
+      assert Text.parse_data_file("{ \"a\": \"\\uaaaa\" }") == %{"a" => "ꪪ"}
+      assert Text.parse_data_file("{ \"a\": \"\\ubbbb\" }") == %{"a" => "뮻"}
+      assert Text.parse_data_file("{ \"a\": \"\\ucccc\" }") == %{"a" => "쳌"}
+      assert Text.parse_data_file("{ \"a\": \"\\udddd\" }") == %{"a" => <<0xDD, 0xDD>>}
+      assert Text.parse_data_file("{ \"a\": \"\\ueeee\" }") == %{"a" => <<0xEE, 0xEE>>}
+      assert Text.parse_data_file("{ \"a\": \"\\uffff\" }") == %{"a" => <<0xFF, 0xFF>>}
+      assert Text.parse_data_file("{ \"a\": \"\\uAAAA\" }") == %{"a" => "ꪪ"}
+      assert Text.parse_data_file("{ \"a\": \"\\uBBBB\" }") == %{"a" => "뮻"}
+      assert Text.parse_data_file("{ \"a\": \"\\uCCCC\" }") == %{"a" => "쳌"}
+      assert Text.parse_data_file("{ \"a\": \"\\uDDDD\" }") == %{"a" => <<0xDD, 0xDD>>}
+      assert Text.parse_data_file("{ \"a\": \"\\uEEEE\" }") == %{"a" => <<0xEE, 0xEE>>}
+      assert Text.parse_data_file("{ \"a\": \"\\uFFFF\" }") == %{"a" => <<0xFF, 0xFF>>}
       assert Text.parse_data_file("{ \"a\": /**/ \"1\" }") == %{"a" => "1"}
       assert Text.parse_data_file("{ \"a\": /* */ \"1\" }") == %{"a" => "1"}
       assert Text.parse_data_file("{ \"a\": /*\n*/ \"1\" }") == %{"a" => "1"}

@@ -9,7 +9,30 @@ defmodule RfwFormats.Text do
 
   # Helpers
 
-  whitespace = ascii_char([?\s, ?\n, ?\r, ?\t]) |> repeat()
+  # Basic whitespace characters
+  whitespace_char = ascii_char([?\s, ?\n, ?\r, ?\t])
+
+  # Line Comment: // comment until end of line
+  line_comment =
+    ignore(string("//"))
+    |> repeat(lookahead_not(ascii_char([?\n])) |> utf8_char([]))
+    |> optional(ascii_char([?\n]))
+
+  # Block Comment: /* comment */
+  block_comment =
+    ignore(string("/*"))
+    |> repeat(lookahead_not(string("*/")) |> utf8_char([]))
+    |> ignore(string("*/"))
+
+  # Combined whitespace including comments
+  whitespace =
+    repeat(
+      choice([
+        whitespace_char,
+        line_comment,
+        block_comment
+      ])
+    )
 
   identifier =
     ascii_char([?a..?z, ?A..?Z, ?_])
@@ -62,6 +85,9 @@ defmodule RfwFormats.Text do
     |> repeat(
       lookahead_not(ascii_char([?"]))
       |> choice([
+        ignore(string("\\u"))
+        |> utf8_string([?0..?9, ?a..?f, ?A..?F], 4)
+        |> map({:parse_unicode_escape, []}),
         string("\\\"") |> replace(?"),
         string("\\\\") |> replace(?\\),
         string("\\/") |> replace(?/),
@@ -71,20 +97,21 @@ defmodule RfwFormats.Text do
         string("\\n") |> replace(?\n),
         string("\\r") |> replace(?\r),
         string("\\t") |> replace(?\t),
-        string("\\u")
-        |> utf8_string([?0..?9, ?a..?f, ?A..?F], 4)
-        |> map({:parse_unicode_escape, []}),
         utf8_char([])
       ])
     )
     |> ignore(ascii_char([?"]))
-    |> reduce({List, :to_string, []})
+    # Changed from List.to_string
+    |> reduce({:erlang, :list_to_binary, []})
 
   single_string_literal =
     ignore(ascii_char([?']))
     |> repeat(
       lookahead_not(ascii_char([?']))
       |> choice([
+        ignore(string("\\u"))
+        |> utf8_string([?0..?9, ?a..?f, ?A..?F], 4)
+        |> map({:parse_unicode_escape, []}),
         string("\\\"") |> replace(?"),
         string("\\\\") |> replace(?\\),
         string("\\/") |> replace(?/),
@@ -94,14 +121,11 @@ defmodule RfwFormats.Text do
         string("\\n") |> replace(?\n),
         string("\\r") |> replace(?\r),
         string("\\t") |> replace(?\t),
-        string("\\u")
-        |> utf8_string([?0..?9, ?a..?f, ?A..?F], 4)
-        |> map({:parse_unicode_escape, []}),
         utf8_char([])
       ])
     )
     |> ignore(ascii_char([?']))
-    |> reduce({List, :to_string, []})
+    |> reduce({:erlang, :list_to_binary, []})
 
   # Combined String Literal Combinator
   string_literal =
@@ -426,8 +450,22 @@ defmodule RfwFormats.Text do
     Model.new_set_state_handler(state_reference, value)
   end
 
-  defp parse_unicode_escape(<<hex::binary-size(4)>>) do
-    <<String.to_integer(hex, 16)::utf8>>
+  defp parse_unicode_escape(hex) do
+    code_point = String.to_integer(hex, 16)
+
+    cond do
+      # Code points up to U+D7FF are valid Unicode scalar values and can be encoded as UTF-8
+      code_point <= 0xD7FF ->
+        <<code_point::utf8>>
+
+      # Code points from U+D800 to U+FFFF should be output as 16-bit code units
+      code_point <= 0xFFFF ->
+        <<code_point::16>>
+
+      # Code points above U+FFFF are invalid in this context
+      true ->
+        raise "Invalid code point in Unicode escape sequence: #{hex}"
+    end
   end
 
   defmodule ParserException do
