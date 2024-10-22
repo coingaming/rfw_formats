@@ -212,6 +212,7 @@ defmodule RfwFormats.Text do
     |> ignore(string(":"))
     |> ignore(whitespace)
     |> parsec(:value)
+    |> wrap()
     |> map({:create_loop, []})
 
   dot_separated_parts =
@@ -303,12 +304,13 @@ defmodule RfwFormats.Text do
   import_statement =
     ignore(string("import"))
     |> ignore(whitespace)
-    |> times(
-      choice([identifier, string_literal])
-      |> ignore(optional(string("."))),
-      min: 1
+    |> wrap(
+      times(
+        choice([identifier, string_literal])
+        |> ignore(optional(string("."))),
+        min: 1
+      )
     )
-    |> reduce({List, :to_string, []})
     |> ignore(string(";"))
     |> map({:create_import, []})
 
@@ -410,7 +412,8 @@ defmodule RfwFormats.Text do
   end
 
   defp create_import(parts) do
-    library_name = Model.new_library_name(String.split(parts, "."))
+    parts = Enum.filter(parts, &(&1 != nil))
+    library_name = Model.new_library_name(parts)
     Model.new_import(library_name)
   end
 
