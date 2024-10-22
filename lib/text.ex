@@ -319,16 +319,29 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> concat(identifier)
     |> ignore(whitespace)
-    |> optional(map)
+    |> optional(
+      map
+      |> wrap()
+    )
     |> ignore(whitespace)
     |> ignore(string("="))
     |> ignore(whitespace)
-    |> choice([
-      parsec(:constructor_call),
-      parsec(:switch)
-    ])
+    |> concat(parsec(:constructor_call))
     |> ignore(string(";"))
+    |> reduce({:assemble_widget_declaration_args, []})
     |> map({:create_widget_declaration, []})
+
+  defp assemble_widget_declaration_args([name, initial_state_list, root]) do
+    initial_state =
+      case initial_state_list do
+        # Map was present
+        [state] -> state
+        # Map was not present
+        [] -> %{}
+      end
+
+    [name, initial_state, root]
+  end
 
   constructor_call =
     identifier
@@ -343,15 +356,27 @@ defmodule RfwFormats.Text do
         |> parsec(:constructor_argument)
       )
     )
+    |> reduce({:assemble_constructor_call_args, []})
     |> ignore(whitespace)
     |> ignore(string(")"))
     |> map({:create_constructor_call, []})
+
+  defp assemble_constructor_call_args([name]) do
+    [name]
+  end
+
+  defp assemble_constructor_call_args([name, args]) do
+    args = List.flatten(args)
+    [name | args]
+  end
 
   constructor_argument =
     identifier
     |> ignore(string(":"))
     |> ignore(whitespace)
     |> parsec(:value)
+    |> wrap()
+    |> reduce({List, :flatten, []})
 
   defcombinatorp(:constructor_call, constructor_call)
   defcombinatorp(:constructor_argument, constructor_argument)
@@ -418,11 +443,12 @@ defmodule RfwFormats.Text do
   end
 
   defp create_widget_declaration([name, initial_state, root]) do
-    Model.new_widget_declaration(name, initial_state || %{}, root)
+    Model.new_widget_declaration(name, initial_state, root)
   end
 
-  defp create_constructor_call([name | arguments]) do
-    Model.new_constructor_call(name, create_map(arguments))
+  defp create_constructor_call([name | args]) do
+    arguments = create_map(args)
+    Model.new_constructor_call(name, arguments)
   end
 
   defp create_switch([input | cases]) do
