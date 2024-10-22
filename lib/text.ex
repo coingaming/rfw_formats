@@ -238,6 +238,7 @@ defmodule RfwFormats.Text do
   state_reference =
     string("state")
     |> concat(dot_separated_parts)
+    |> wrap()
     |> map({:create_state_reference, []})
 
   event_handler =
@@ -246,6 +247,7 @@ defmodule RfwFormats.Text do
     |> concat(string_literal)
     |> ignore(whitespace)
     |> concat(map)
+    |> wrap()
     |> map({:create_event_handler, []})
 
   set_state_handler =
@@ -256,6 +258,7 @@ defmodule RfwFormats.Text do
     |> ignore(string("="))
     |> ignore(whitespace)
     |> parsec(:value)
+    |> wrap()
     |> map({:create_set_state_handler, []})
 
   switch =
@@ -334,13 +337,15 @@ defmodule RfwFormats.Text do
   defp assemble_widget_declaration_args([name, initial_state_list, root]) do
     initial_state =
       case initial_state_list do
-        # Map was present
         [state] -> state
-        # Map was not present
-        [] -> %{}
+        nil -> %{}
       end
 
     [name, initial_state, root]
+  end
+
+  defp assemble_widget_declaration_args([name, root]) do
+    [name, %{}, root]
   end
 
   constructor_call =
