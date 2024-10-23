@@ -249,8 +249,7 @@ defmodule RfwFormats.Text do
   switch =
     ignore(string("switch"))
     |> ignore(whitespace)
-    # Tag the input value
-    |> tag(parsec(:value), :input)
+    |> unwrap_and_tag(parsec(:value), :input)
     |> ignore(whitespace)
     |> ignore(string("{"))
     |> ignore(whitespace)
@@ -271,7 +270,6 @@ defmodule RfwFormats.Text do
         |> ignore(whitespace),
         min: 1
       ),
-      # Tag the cases
       :cases
     )
     |> ignore(whitespace)
@@ -484,14 +482,15 @@ defmodule RfwFormats.Text do
   defcombinatorp(:widget_builder, widget_builder)
   defcombinatorp(:constructor_call, constructor_call)
   defcombinatorp(:constructor_argument, constructor_argument)
-  defparsecp(:do_parse_library_file, library)
+  defparsecp(:do_parse_library_file, library, debug: true)
 
   defparsecp(
     :do_parse_data_file,
     ignore(whitespace)
     |> concat(map)
     |> ignore(whitespace)
-    |> eos()
+    |> eos(),
+    debug: true
   )
 
   defp parse_unicode_escape(hex) do
