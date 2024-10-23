@@ -7,11 +7,6 @@ defmodule RfwFormats.Text do
 
   alias RfwFormats.Model
 
-  # Helpers
-
-  # Basic whitespace characters
-  whitespace_char = ascii_char([?\s, ?\n, ?\r, ?\t])
-
   # Line Comment: // comment until end of line
   line_comment =
     ignore(string("//"))
@@ -24,6 +19,9 @@ defmodule RfwFormats.Text do
     |> repeat(lookahead_not(string("*/")) |> utf8_char([]))
     |> ignore(string("*/"))
 
+  # Basic whitespace characters
+  whitespace_char = ascii_char([?\s, ?\n, ?\r, ?\t])
+
   # Combined whitespace including comments
   whitespace =
     repeat(
@@ -33,6 +31,22 @@ defmodule RfwFormats.Text do
         block_comment
       ])
     )
+
+  integer =
+    optional(ascii_char([?-]))
+    |> concat(
+      choice([
+        string("0x")
+        |> ascii_string([?0..?9, ?a..?f, ?A..?F], min: 1),
+        ascii_string([?0..?9], min: 1)
+        |> lookahead_not(ascii_char([?., ?e, ?E]))
+      ])
+    )
+    |> reduce({List, :to_string, []})
+    |> map({:parse_integer, []})
+
+  defp parse_integer("0x" <> hex), do: String.to_integer(hex, 16)
+  defp parse_integer(str), do: String.to_integer(str)
 
   identifier =
     ascii_char([?a..?z, ?A..?Z, ?_])
@@ -64,22 +78,6 @@ defmodule RfwFormats.Text do
     float
   end
 
-  integer =
-    optional(ascii_char([?-]))
-    |> concat(
-      choice([
-        string("0x")
-        |> ascii_string([?0..?9, ?a..?f, ?A..?F], min: 1),
-        ascii_string([?0..?9], min: 1)
-        |> lookahead_not(ascii_char([?., ?e, ?E]))
-      ])
-    )
-    |> reduce({List, :to_string, []})
-    |> map({:parse_integer, []})
-
-  defp parse_integer("0x" <> hex), do: String.to_integer(hex, 16)
-  defp parse_integer(str), do: String.to_integer(str)
-
   double_string_literal =
     ignore(ascii_char([?"]))
     |> repeat(
@@ -101,7 +99,6 @@ defmodule RfwFormats.Text do
       ])
     )
     |> ignore(ascii_char([?"]))
-    # Changed from List.to_string
     |> reduce({:erlang, :list_to_binary, []})
 
   single_string_literal =
@@ -150,12 +147,13 @@ defmodule RfwFormats.Text do
       parsec(:list),
       parsec(:map),
       parsec(:loop),
+      parsec(:switch),
       parsec(:args_reference),
       parsec(:data_reference),
       parsec(:state_reference),
       parsec(:event_handler),
       parsec(:set_state_handler),
-      parsec(:switch)
+      parsec(:widget_builder)
     ])
 
   list =
@@ -201,6 +199,16 @@ defmodule RfwFormats.Text do
     |> ignore(string("}"))
     |> map({:create_map, []})
 
+  defp create_map([]), do: %{}
+
+  defp create_map(pairs) do
+    Enum.chunk_every(pairs, 2)
+    |> Enum.reduce(%{}, fn
+      [_k, :__null__], acc -> acc
+      [k, v], acc -> Map.put(acc, k, v)
+    end)
+  end
+
   loop =
     ignore(string("...for"))
     |> ignore(whitespace)
@@ -215,51 +223,9 @@ defmodule RfwFormats.Text do
     |> wrap()
     |> map({:create_loop, []})
 
-  dot_separated_parts =
-    times(
-      ignore(string("."))
-      |> choice([
-        integer,
-        identifier
-      ]),
-      min: 1
-    )
-
-  args_reference =
-    string("args")
-    |> concat(dot_separated_parts)
-    |> map({:create_args_reference, []})
-
-  data_reference =
-    string("data")
-    |> concat(dot_separated_parts)
-    |> map({:create_data_reference, []})
-
-  state_reference =
-    string("state")
-    |> concat(dot_separated_parts)
-    |> wrap()
-    |> map({:create_state_reference, []})
-
-  event_handler =
-    ignore(string("event"))
-    |> ignore(whitespace)
-    |> concat(string_literal)
-    |> ignore(whitespace)
-    |> concat(map)
-    |> wrap()
-    |> map({:create_event_handler, []})
-
-  set_state_handler =
-    ignore(string("set"))
-    |> ignore(whitespace)
-    |> concat(state_reference)
-    |> ignore(whitespace)
-    |> ignore(string("="))
-    |> ignore(whitespace)
-    |> parsec(:value)
-    |> wrap()
-    |> map({:create_set_state_handler, []})
+  defp create_loop([_identifier, input, output]) do
+    Model.new_loop(input, output)
+  end
 
   switch =
     ignore(string("switch"))
@@ -283,26 +249,75 @@ defmodule RfwFormats.Text do
     |> ignore(string("}"))
     |> map({:create_switch, []})
 
-  defcombinatorp(:value, value)
-  defcombinatorp(:list, list)
-  defcombinatorp(:map, map)
-  defcombinatorp(:loop, loop)
-  defcombinatorp(:args_reference, args_reference)
-  defcombinatorp(:data_reference, data_reference)
-  defcombinatorp(:state_reference, state_reference)
-  defcombinatorp(:event_handler, event_handler)
-  defcombinatorp(:set_state_handler, set_state_handler)
-  defcombinatorp(:switch, switch)
+  defp create_switch([input | cases]) do
+    Model.new_switch(input, create_map(cases))
+  end
 
-  defparsecp(
-    :do_parse_data_file,
-    ignore(whitespace)
-    |> concat(map)
+  dot_separated_parts =
+    times(
+      ignore(string("."))
+      |> choice([
+        integer,
+        identifier
+      ]),
+      min: 1
+    )
+
+  args_reference =
+    string("args")
+    |> concat(dot_separated_parts)
+    |> map({:create_args_reference, []})
+
+  defp create_args_reference([_ | parts]) do
+    Model.new_args_reference(parts)
+  end
+
+  data_reference =
+    string("data")
+    |> concat(dot_separated_parts)
+    |> map({:create_data_reference, []})
+
+  defp create_data_reference([_ | parts]) do
+    Model.new_data_reference(parts)
+  end
+
+  state_reference =
+    string("state")
+    |> concat(dot_separated_parts)
+    |> wrap()
+    |> map({:create_state_reference, []})
+
+  defp create_state_reference([_ | parts]) do
+    Model.new_state_reference(parts)
+  end
+
+  event_handler =
+    ignore(string("event"))
     |> ignore(whitespace)
-    |> eos()
-  )
+    |> concat(string_literal)
+    |> ignore(whitespace)
+    |> concat(map)
+    |> wrap()
+    |> map({:create_event_handler, []})
 
-  # Library parsing
+  defp create_event_handler([event_name, event_arguments]) do
+    Model.new_event_handler(event_name, event_arguments)
+  end
+
+  set_state_handler =
+    ignore(string("set"))
+    |> ignore(whitespace)
+    |> concat(state_reference)
+    |> ignore(whitespace)
+    |> ignore(string("="))
+    |> ignore(whitespace)
+    |> parsec(:value)
+    |> wrap()
+    |> map({:create_set_state_handler, []})
+
+  defp create_set_state_handler([state_reference, value]) do
+    Model.new_set_state_handler(state_reference, value)
+  end
 
   import_statement =
     ignore(string("import"))
@@ -316,6 +331,12 @@ defmodule RfwFormats.Text do
     )
     |> ignore(string(";"))
     |> map({:create_import, []})
+
+  defp create_import(parts) do
+    parts = Enum.filter(parts, &(&1 != nil))
+    library_name = Model.new_library_name(parts)
+    Model.new_import(library_name)
+  end
 
   widget_declaration =
     ignore(string("widget"))
@@ -334,6 +355,10 @@ defmodule RfwFormats.Text do
     |> reduce({:assemble_widget_declaration_args, []})
     |> map({:create_widget_declaration, []})
 
+  defp create_widget_declaration([name, initial_state, root]) do
+    Model.new_widget_declaration(name, initial_state, root)
+  end
+
   defp assemble_widget_declaration_args([name, initial_state_list, root]) do
     initial_state =
       case initial_state_list do
@@ -346,6 +371,30 @@ defmodule RfwFormats.Text do
 
   defp assemble_widget_declaration_args([name, root]) do
     [name, %{}, root]
+  end
+
+  widget_builder =
+    ignore(string("Builder"))
+    |> ignore(whitespace)
+    |> ignore(string("("))
+    |> ignore(whitespace)
+    |> ignore(string("builder"))
+    |> ignore(whitespace)
+    |> ignore(string(":"))
+    |> ignore(whitespace)
+    |> ignore(string("("))
+    |> concat(identifier)
+    |> ignore(string(")"))
+    |> ignore(whitespace)
+    |> ignore(string("=>"))
+    |> ignore(whitespace)
+    |> parsec(:value)
+    |> ignore(whitespace)
+    |> ignore(string(")"))
+    |> map({:create_widget_builder, []})
+
+  defp create_widget_builder([arg_name, body]) do
+    Model.new_widget_builder_declaration(arg_name, body)
   end
 
   constructor_call =
@@ -366,13 +415,9 @@ defmodule RfwFormats.Text do
     |> ignore(string(")"))
     |> map({:create_constructor_call, []})
 
-  defp assemble_constructor_call_args([name]) do
-    [name]
-  end
-
-  defp assemble_constructor_call_args([name, args]) do
-    args = List.flatten(args)
-    [name | args]
+  defp create_constructor_call([name | args]) do
+    arguments = create_map(args)
+    Model.new_constructor_call(name, arguments)
   end
 
   constructor_argument =
@@ -383,8 +428,14 @@ defmodule RfwFormats.Text do
     |> wrap()
     |> reduce({List, :flatten, []})
 
-  defcombinatorp(:constructor_call, constructor_call)
-  defcombinatorp(:constructor_argument, constructor_argument)
+  defp assemble_constructor_call_args([name]) do
+    [name]
+  end
+
+  defp assemble_constructor_call_args([name, args]) do
+    args = List.flatten(args)
+    [name | args]
+  end
 
   library =
     ignore(whitespace)
@@ -393,7 +444,47 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> eos()
 
+  defcombinatorp(:value, value)
+  defcombinatorp(:list, list)
+  defcombinatorp(:map, map)
+  defcombinatorp(:loop, loop)
+  defcombinatorp(:switch, switch)
+  defcombinatorp(:args_reference, args_reference)
+  defcombinatorp(:data_reference, data_reference)
+  defcombinatorp(:state_reference, state_reference)
+  defcombinatorp(:event_handler, event_handler)
+  defcombinatorp(:set_state_handler, set_state_handler)
+  defcombinatorp(:widget_builder, widget_builder)
+  defcombinatorp(:constructor_call, constructor_call)
+  defcombinatorp(:constructor_argument, constructor_argument)
+
   defparsecp(:do_parse_library_file, library)
+
+  defparsecp(
+    :do_parse_data_file,
+    ignore(whitespace)
+    |> concat(map)
+    |> ignore(whitespace)
+    |> eos()
+  )
+
+  defp parse_unicode_escape(hex) do
+    code_point = String.to_integer(hex, 16)
+
+    cond do
+      # Code points up to U+D7FF are valid Unicode scalar values and can be encoded as UTF-8
+      code_point <= 0xD7FF ->
+        <<code_point::utf8>>
+
+      # Code points from U+D800 to U+FFFF should be output as 16-bit code units
+      code_point <= 0xFFFF ->
+        <<code_point::16>>
+
+      # Code points above U+FFFF are invalid in this context
+      true ->
+        raise "Invalid code point in Unicode escape sequence: #{hex}"
+    end
+  end
 
   @doc """
   Parse a Remote Flutter Widgets text data file.
@@ -426,79 +517,6 @@ defmodule RfwFormats.Text do
 
       other ->
         raise __MODULE__.ParserException, {"Unexpected parser result", inspect(other), 0, 0}
-    end
-  end
-
-  # Helper functions to create Model structs
-
-  defp create_map([]), do: %{}
-
-  defp create_map(pairs) do
-    Enum.chunk_every(pairs, 2)
-    |> Enum.reduce(%{}, fn
-      [_k, :__null__], acc -> acc
-      [k, v], acc -> Map.put(acc, k, v)
-    end)
-  end
-
-  defp create_import(parts) do
-    parts = Enum.filter(parts, &(&1 != nil))
-    library_name = Model.new_library_name(parts)
-    Model.new_import(library_name)
-  end
-
-  defp create_widget_declaration([name, initial_state, root]) do
-    Model.new_widget_declaration(name, initial_state, root)
-  end
-
-  defp create_constructor_call([name | args]) do
-    arguments = create_map(args)
-    Model.new_constructor_call(name, arguments)
-  end
-
-  defp create_switch([input | cases]) do
-    Model.new_switch(input, create_map(cases))
-  end
-
-  defp create_loop([_identifier, input, output]) do
-    Model.new_loop(input, output)
-  end
-
-  defp create_args_reference([_ | parts]) do
-    Model.new_args_reference(parts)
-  end
-
-  defp create_data_reference([_ | parts]) do
-    Model.new_data_reference(parts)
-  end
-
-  defp create_state_reference([_ | parts]) do
-    Model.new_state_reference(parts)
-  end
-
-  defp create_event_handler([event_name, event_arguments]) do
-    Model.new_event_handler(event_name, event_arguments)
-  end
-
-  defp create_set_state_handler([state_reference, value]) do
-    Model.new_set_state_handler(state_reference, value)
-  end
-
-  defp parse_unicode_escape(hex) do
-    code_point = String.to_integer(hex, 16)
-
-    cond do
-      # Code points up to U+D7FF are valid Unicode scalar values and can be encoded as UTF-8
-      code_point <= 0xD7FF ->
-        <<code_point::utf8>>
-
-      # Code points from U+D800 to U+FFFF should be output as 16-bit code units
-      code_point <= 0xFFFF ->
-        <<code_point::16>>
-
-      # Code points above U+FFFF are invalid in this context
-      true ->
-        raise "Invalid code point in Unicode escape sequence: #{hex}"
     end
   end
 
