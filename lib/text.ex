@@ -153,7 +153,8 @@ defmodule RfwFormats.Text do
       parsec(:state_reference),
       parsec(:event_handler),
       parsec(:set_state_handler),
-      parsec(:widget_builder)
+      parsec(:widget_builder),
+      parsec(:constructor_call)
     ])
 
   list =
@@ -231,42 +232,55 @@ defmodule RfwFormats.Text do
     Model.new_loop(input, output)
   end
 
+  # Modified to handle numeric strings in dot_separated_parts
   dot_separated_parts =
     times(
       ignore(string("."))
       |> choice([
-        integer,
-        string_literal,
+        ascii_string([?0..?9], min: 1) |> map({String, :to_integer, []}),
+        string_literal |> map({:wrap_string_part, []}),
         identifier
       ]),
       min: 1
     )
 
+  defp wrap_string_part(str), do: [str]
+
   switch =
     ignore(string("switch"))
     |> ignore(whitespace)
-    |> parsec(:value)
+    # Tag the input value
+    |> tag(parsec(:value), :input)
     |> ignore(whitespace)
     |> ignore(string("{"))
     |> ignore(whitespace)
-    |> times(
-      choice([
-        ignore(string("default"))
-        |> replace(nil),
-        parsec(:value)
-      ])
-      |> ignore(string(":"))
-      |> ignore(whitespace)
-      |> parsec(:value)
-      |> ignore(whitespace)
-      |> optional(string(",")),
-      min: 1
+    |> tag(
+      times(
+        choice([
+          ignore(string("default"))
+          |> replace(nil),
+          parsec(:value)
+        ])
+        |> ignore(whitespace)
+        |> ignore(string(":"))
+        |> ignore(whitespace)
+        |> parsec(:value)
+        |> wrap()
+        |> ignore(whitespace)
+        |> optional(ignore(string(",")))
+        |> ignore(whitespace),
+        min: 1
+      ),
+      # Tag the cases
+      :cases
     )
+    |> ignore(whitespace)
     |> ignore(string("}"))
+    |> wrap()
     |> map({:create_switch, []})
 
-  defp create_switch([input | cases]) do
-    Model.new_switch(input, create_map(cases))
+  defp create_switch(input: input, cases: cases) do
+    Model.new_switch(input, create_map(List.flatten(cases)))
   end
 
   args_reference =
@@ -275,7 +289,7 @@ defmodule RfwFormats.Text do
     |> map({:create_args_reference, []})
 
   defp create_args_reference([_ | parts]) do
-    Model.new_args_reference(parts)
+    Model.new_args_reference(List.flatten(parts))
   end
 
   data_reference =
@@ -284,7 +298,7 @@ defmodule RfwFormats.Text do
     |> map({:create_data_reference, []})
 
   defp create_data_reference([_ | parts]) do
-    Model.new_data_reference(parts)
+    Model.new_data_reference(List.flatten(parts))
   end
 
   state_reference =
@@ -294,7 +308,7 @@ defmodule RfwFormats.Text do
     |> map({:create_state_reference, []})
 
   defp create_state_reference([_ | parts]) do
-    Model.new_state_reference(parts)
+    Model.new_state_reference(List.flatten(parts))
   end
 
   event_handler =
@@ -344,6 +358,12 @@ defmodule RfwFormats.Text do
     Model.new_import(library_name)
   end
 
+  widget_root =
+    choice([
+      parsec(:constructor_call),
+      parsec(:switch)
+    ])
+
   widget_declaration =
     ignore(string("widget"))
     |> ignore(whitespace)
@@ -356,10 +376,8 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("="))
     |> ignore(whitespace)
-    |> choice([
-      parsec(:constructor_call),
-      parsec(:switch)
-    ])
+    |> concat(widget_root)
+    |> ignore(whitespace)
     |> ignore(string(";"))
     |> reduce({:assemble_widget_declaration_args, []})
     |> map({:create_widget_declaration, []})
@@ -466,7 +484,6 @@ defmodule RfwFormats.Text do
   defcombinatorp(:widget_builder, widget_builder)
   defcombinatorp(:constructor_call, constructor_call)
   defcombinatorp(:constructor_argument, constructor_argument)
-
   defparsecp(:do_parse_library_file, library)
 
   defparsecp(
