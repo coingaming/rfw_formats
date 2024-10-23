@@ -205,9 +205,13 @@ defmodule RfwFormats.Text do
     Enum.chunk_every(pairs, 2)
     |> Enum.reduce(%{}, fn
       [_k, :__null__], acc -> acc
-      [k, v], acc -> Map.put(acc, k, v)
+      [k, v], acc -> Map.put(acc, k, wrap_value(k, v))
     end)
   end
+
+  # Helper to wrap certain values in lists when needed
+  defp wrap_value(_key, %Model.Loop{} = v), do: [v]
+  defp wrap_value(_key, v), do: v
 
   loop =
     ignore(string("...for"))
@@ -227,6 +231,17 @@ defmodule RfwFormats.Text do
     Model.new_loop(input, output)
   end
 
+  dot_separated_parts =
+    times(
+      ignore(string("."))
+      |> choice([
+        integer,
+        string_literal,
+        identifier
+      ]),
+      min: 1
+    )
+
   switch =
     ignore(string("switch"))
     |> ignore(whitespace)
@@ -243,7 +258,8 @@ defmodule RfwFormats.Text do
       |> ignore(string(":"))
       |> ignore(whitespace)
       |> parsec(:value)
-      |> ignore(whitespace),
+      |> ignore(whitespace)
+      |> optional(string(",")),
       min: 1
     )
     |> ignore(string("}"))
@@ -252,16 +268,6 @@ defmodule RfwFormats.Text do
   defp create_switch([input | cases]) do
     Model.new_switch(input, create_map(cases))
   end
-
-  dot_separated_parts =
-    times(
-      ignore(string("."))
-      |> choice([
-        integer,
-        identifier
-      ]),
-      min: 1
-    )
 
   args_reference =
     string("args")
@@ -350,7 +356,10 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("="))
     |> ignore(whitespace)
-    |> concat(parsec(:constructor_call))
+    |> choice([
+      parsec(:constructor_call),
+      parsec(:switch)
+    ])
     |> ignore(string(";"))
     |> reduce({:assemble_widget_declaration_args, []})
     |> map({:create_widget_declaration, []})
