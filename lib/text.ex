@@ -154,7 +154,8 @@ defmodule RfwFormats.Text do
       parsec(:event_handler),
       parsec(:set_state_handler),
       parsec(:widget_builder),
-      parsec(:constructor_call)
+      parsec(:constructor_call),
+      parsec(:loop_var)
     ])
 
   list =
@@ -214,22 +215,61 @@ defmodule RfwFormats.Text do
   defp wrap_value(_key, %Model.Loop{} = v), do: [v]
   defp wrap_value(_key, v), do: v
 
+  loop_var =
+    identifier
+    |> post_traverse({:check_loop_var, []})
+
+  defp check_loop_var(rest, [id], context, _line, _offset) do
+    case Map.get(context, :loop_vars, []) |> Enum.find_index(&(&1 == id)) do
+      # Not a loop var
+      nil ->
+        {rest, [id], context}
+
+      idx ->
+        loop_ref = Model.new_loop_reference(idx, [])
+        {rest, [loop_ref], context}
+    end
+  end
+
   loop =
     ignore(string("...for"))
     |> ignore(whitespace)
-    |> concat(identifier)
+    |> tag(identifier, :loop_var)
+    |> post_traverse({:push_loop_var, []})
     |> ignore(whitespace)
     |> ignore(string("in"))
     |> ignore(whitespace)
-    |> parsec(:value)
+    |> tag(parsec(:value), :input)
     |> ignore(string(":"))
     |> ignore(whitespace)
-    |> parsec(:value)
+    |> tag(parsec(:value), :output)
+    |> post_traverse({:pop_loop_var, []})
     |> wrap()
     |> map({:create_loop, []})
 
-  defp create_loop([_identifier, input, output]) do
-    Model.new_loop(input, output)
+  defp push_loop_var(rest, [loop_var: var], context, _line, _offset) do
+    {rest, [loop_var: var], Map.update(context, :loop_vars, [var], &[var | &1])}
+  end
+
+  defp pop_loop_var(rest, args, context, _line, _offset) do
+    {rest, args, Map.update(context, :loop_vars, [], &tl(&1))}
+  end
+
+  defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, [output]}]) do
+    # Flatten the input and output if necessary
+    processed_input =
+      case input do
+        [inner] -> inner
+        _ -> input
+      end
+
+    processed_output =
+      case output do
+        [single] -> single
+        _ -> output
+      end
+
+    Model.new_loop(processed_input, processed_output)
   end
 
   dot_separated_parts =
@@ -471,6 +511,7 @@ defmodule RfwFormats.Text do
   defcombinatorp(:list, list)
   defcombinatorp(:map, map)
   defcombinatorp(:loop, loop)
+  defcombinatorp(:loop_var, identifier |> post_traverse({:check_loop_var, []}))
   defcombinatorp(:switch, switch)
   defcombinatorp(:args_reference, args_reference)
   defcombinatorp(:data_reference, data_reference)
