@@ -220,13 +220,17 @@ defmodule RfwFormats.Text do
     |> post_traverse({:check_loop_var, []})
 
   defp check_loop_var(rest, [id], context, _line, _offset) do
+    IO.inspect({"check_loop_var called", id, context}, label: "TRACE")
+
     case Map.get(context, :loop_vars, []) |> Enum.find_index(&(&1 == id)) do
       # Not a loop var
       nil ->
+        IO.inspect({"check_loop_var not found", id}, label: "TRACE")
         {rest, [id], context}
 
       idx ->
         loop_ref = Model.new_loop_reference(idx, [])
+        IO.inspect({"check_loop_var created ref", loop_ref}, label: "TRACE")
         {rest, [loop_ref], context}
     end
   end
@@ -248,14 +252,23 @@ defmodule RfwFormats.Text do
     |> map({:create_loop, []})
 
   defp push_loop_var(rest, [loop_var: var], context, _line, _offset) do
-    {rest, [loop_var: var], Map.update(context, :loop_vars, [var], &[var | &1])}
+    IO.inspect({"push_loop_var context before", context}, label: "TRACE")
+
+    result =
+      {rest, [loop_var: var],
+       Map.update(context, :loop_vars, [List.first(var)], &[List.first(var) | &1])}
+
+    IO.inspect({"push_loop_var context after", elem(result, 2)}, label: "TRACE")
+    result
   end
 
   defp pop_loop_var(rest, args, context, _line, _offset) do
+    IO.inspect({"pop_loop_var", args, context}, label: "TRACE")
     {rest, args, Map.update(context, :loop_vars, [], &tl(&1))}
   end
 
-  defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, [output]}]) do
+  defp create_loop([{:loop_var, identifier}, {:input, [input]}, {:output, [output]}]) do
+    IO.inspect({"create_loop input", identifier, input, output}, label: "TRACE")
     # Flatten the input and output if necessary
     processed_input =
       case input do
@@ -265,11 +278,17 @@ defmodule RfwFormats.Text do
 
     processed_output =
       case output do
-        [single] -> single
-        _ -> output
+        [single] ->
+          IO.inspect({"create_loop processing output", single}, label: "TRACE")
+          single
+
+        _ ->
+          output
       end
 
-    Model.new_loop(processed_input, processed_output)
+    result = Model.new_loop(processed_input, processed_output)
+    IO.inspect({"create_loop final", result}, label: "TRACE")
+    result
   end
 
   dot_separated_parts =
@@ -320,7 +339,9 @@ defmodule RfwFormats.Text do
 
   args_reference =
     string("args")
+    |> unwrap_and_tag(:args)
     |> concat(dot_separated_parts)
+    |> wrap()
     |> map({:create_args_reference, []})
 
   defp create_args_reference([_ | parts]) do
