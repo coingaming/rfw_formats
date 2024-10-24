@@ -232,19 +232,19 @@ defmodule RfwFormats.Text do
     Model.new_loop(input, output)
   end
 
-  # Modified to handle numeric strings in dot_separated_parts
   dot_separated_parts =
     times(
       ignore(string("."))
       |> choice([
-        ascii_string([?0..?9], min: 1) |> map({String, :to_integer, []}),
-        string_literal |> map({:wrap_string_part, []}),
+        # Handle numeric strings - keep as string
+        ascii_string([?0..?9], min: 1),
+        # Handle string literals
+        string_literal,
+        # Handle identifiers
         identifier
       ]),
       min: 1
     )
-
-  defp wrap_string_part(str), do: [str]
 
   switch =
     ignore(string("switch"))
@@ -293,9 +293,11 @@ defmodule RfwFormats.Text do
   data_reference =
     string("data")
     |> concat(dot_separated_parts)
+    |> wrap()
     |> map({:create_data_reference, []})
 
   defp create_data_reference([_ | parts]) do
+    # Flatten and ensure all parts are in the correct order
     Model.new_data_reference(List.flatten(parts))
   end
 
@@ -489,8 +491,7 @@ defmodule RfwFormats.Text do
     ignore(whitespace)
     |> concat(map)
     |> ignore(whitespace)
-    |> eos(),
-    debug: true
+    |> eos()
   )
 
   defp parse_unicode_escape(hex) do
