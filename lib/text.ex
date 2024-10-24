@@ -148,7 +148,9 @@ defmodule RfwFormats.Text do
       parsec(:map),
       parsec(:loop),
       parsec(:switch),
-      parsec(:reference),
+      parsec(:args_reference),
+      parsec(:data_reference),
+      parsec(:state_reference),
       parsec(:event_handler),
       parsec(:set_state_handler),
       parsec(:widget_builder),
@@ -223,14 +225,8 @@ defmodule RfwFormats.Text do
     |> ignore(string(":"))
     |> ignore(whitespace)
     |> parsec(:value)
-    |> post_traverse({__MODULE__, :register_loop_var, []})
     |> wrap()
     |> map({:create_loop, []})
-
-  def register_loop_var(rest, [loop_var, collection, value | other], context, _line, _offset) do
-    ctx = Map.update(context, :loop_vars, [loop_var], &[loop_var | &1])
-    {rest, [loop_var, collection, value | other], ctx}
-  end
 
   defp create_loop([_identifier, input, output]) do
     Model.new_loop(input, output)
@@ -240,11 +236,8 @@ defmodule RfwFormats.Text do
     times(
       ignore(string("."))
       |> choice([
-        # Handle numeric strings - keep as string
-        ascii_string([?0..?9], min: 1),
-        # Handle string literals
+        ascii_string([?0..?9], min: 1) |> map({:to_string, []}),
         string_literal,
-        # Handle identifiers
         identifier
       ]),
       min: 1
@@ -285,33 +278,33 @@ defmodule RfwFormats.Text do
     Model.new_switch(input, create_map(List.flatten(cases)))
   end
 
-  reference =
-    identifier
-    |> post_traverse({__MODULE__, :resolve_reference, []})
+  args_reference =
+    string("args")
+    |> concat(dot_separated_parts)
+    |> map({:create_args_reference, []})
 
-  def resolve_reference(rest, [identifier], context, _line, _offset) do
-    loop_vars = Map.get(context, :loop_vars, [])
-    index = Enum.find_index(loop_vars, &(&1 == identifier))
+  defp create_args_reference([_ | parts]) do
+    Model.new_args_reference(List.flatten(parts))
+  end
 
-    cond do
-      index != nil ->
-        {rest, [Model.new_loop_reference(index, [])], context}
+  data_reference =
+    string("data")
+    |> concat(dot_separated_parts)
+    |> wrap()
+    |> map({:create_data_reference, []})
 
-      identifier == "args" ->
-        {rest, [Model.new_args_reference([])], context}
+  defp create_data_reference([_ | parts]) do
+    Model.new_data_reference(List.flatten(parts))
+  end
 
-      identifier == "data" ->
-        {rest, [Model.new_data_reference([])], context}
+  state_reference =
+    string("state")
+    |> concat(dot_separated_parts)
+    |> wrap()
+    |> map({:create_state_reference, []})
 
-      identifier == "state" ->
-        {rest, [Model.new_state_reference([])], context}
-
-      identifier in Map.get(context, :builder_args, []) ->
-        {rest, [Model.new_widget_builder_arg_reference(identifier, [])], context}
-
-      true ->
-        {rest, [identifier], context}
-    end
+  defp create_state_reference([_ | parts]) do
+    Model.new_state_reference(List.flatten(parts))
   end
 
   event_handler =
@@ -330,7 +323,7 @@ defmodule RfwFormats.Text do
   set_state_handler =
     ignore(string("set"))
     |> ignore(whitespace)
-    |> concat(reference)
+    |> concat(state_reference)
     |> ignore(whitespace)
     |> ignore(string("="))
     |> ignore(whitespace)
@@ -414,7 +407,6 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("("))
     |> concat(identifier)
-    |> post_traverse({__MODULE__, :register_builder_arg, []})
     |> ignore(string(")"))
     |> ignore(whitespace)
     |> ignore(string("=>"))
@@ -423,11 +415,6 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string(")"))
     |> map({:create_widget_builder, []})
-
-  def register_builder_arg(rest, [arg_name | other], context, _line, _offset) do
-    ctx = Map.update(context, :builder_args, [arg_name], &[arg_name | &1])
-    {rest, [arg_name | other], ctx}
-  end
 
   defp create_widget_builder([arg_name, body]) do
     Model.new_widget_builder_declaration(arg_name, body)
@@ -485,13 +472,15 @@ defmodule RfwFormats.Text do
   defcombinatorp(:map, map)
   defcombinatorp(:loop, loop)
   defcombinatorp(:switch, switch)
-  defcombinatorp(:reference, reference)
+  defcombinatorp(:args_reference, args_reference)
+  defcombinatorp(:data_reference, data_reference)
+  defcombinatorp(:state_reference, state_reference)
   defcombinatorp(:event_handler, event_handler)
   defcombinatorp(:set_state_handler, set_state_handler)
   defcombinatorp(:widget_builder, widget_builder)
   defcombinatorp(:constructor_call, constructor_call)
   defcombinatorp(:constructor_argument, constructor_argument)
-  defparsecp(:do_parse_library_file, library, debug: true)
+  defparsecp(:do_parse_library_file, library)
 
   defparsecp(
     :do_parse_data_file,
