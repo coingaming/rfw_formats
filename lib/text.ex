@@ -137,6 +137,17 @@ defmodule RfwFormats.Text do
 
   boolean = choice([true_literal, false_literal])
 
+  dot_separated_parts =
+    times(
+      ignore(string("."))
+      |> choice([
+        ascii_string([?0..?9], min: 1) |> map({:to_string, []}),
+        string_literal,
+        identifier
+      ]),
+      min: 1
+    )
+
   value =
     choice([
       boolean,
@@ -217,21 +228,28 @@ defmodule RfwFormats.Text do
 
   loop_var =
     identifier
+    |> unwrap_and_tag(:var_name)
+    |> optional(
+      dot_separated_parts
+      |> unwrap_and_tag(:parts)
+    )
     |> post_traverse({:check_loop_var, []})
 
-  defp check_loop_var(rest, [id], context, _line, _offset) do
-    IO.inspect({"check_loop_var called", id, context}, label: "TRACE")
+  defp check_loop_var(rest, parsed, context, _line, _offset) do
+    IO.inspect({"check_loop_var called", rest, parsed, context}, label: "TRACE")
+    var_name = Keyword.get(parsed, :var_name)
+    raw_parts = Keyword.get(parsed, :parts, [])
+    parts = if is_list(raw_parts), do: raw_parts, else: [raw_parts]
 
-    case Map.get(context, :loop_vars, []) |> Enum.find_index(&(&1 == id)) do
-      # Not a loop var
-      nil ->
-        IO.inspect({"check_loop_var not found", id}, label: "TRACE")
-        {rest, [id], context}
-
-      idx ->
-        loop_ref = Model.new_loop_reference(idx, [])
-        IO.inspect({"check_loop_var created ref", loop_ref}, label: "TRACE")
+    case Map.get(context, :loop_vars, []) |> Enum.find_index(&(&1 == var_name)) do
+      index when is_integer(index) ->
+        loop_ref = Model.new_loop_reference(index, parts)
+        IO.inspect({"check_loop_var found", loop_ref}, label: "TRACE")
         {rest, [loop_ref], context}
+
+      nil ->
+        IO.inspect({"check_loop_var not found", var_name}, label: "TRACE")
+        {rest, [var_name], context}
     end
   end
 
@@ -252,7 +270,7 @@ defmodule RfwFormats.Text do
     |> map({:create_loop, []})
 
   defp push_loop_var(rest, [loop_var: var], context, _line, _offset) do
-    IO.inspect({"push_loop_var context before", context}, label: "TRACE")
+    IO.inspect({"push_loop_var context before", rest, var, context}, label: "TRACE")
 
     result =
       {rest, [loop_var: var],
@@ -290,17 +308,6 @@ defmodule RfwFormats.Text do
     IO.inspect({"create_loop final", result}, label: "TRACE")
     result
   end
-
-  dot_separated_parts =
-    times(
-      ignore(string("."))
-      |> choice([
-        ascii_string([?0..?9], min: 1) |> map({:to_string, []}),
-        string_literal,
-        identifier
-      ]),
-      min: 1
-    )
 
   switch =
     ignore(string("switch"))
@@ -532,7 +539,13 @@ defmodule RfwFormats.Text do
   defcombinatorp(:list, list)
   defcombinatorp(:map, map)
   defcombinatorp(:loop, loop)
-  defcombinatorp(:loop_var, identifier |> post_traverse({:check_loop_var, []}))
+
+  defcombinatorp(
+    :loop_var,
+    loop_var
+    |> debug()
+  )
+
   defcombinatorp(:switch, switch)
   defcombinatorp(:args_reference, args_reference)
   defcombinatorp(:data_reference, data_reference)
@@ -592,6 +605,8 @@ defmodule RfwFormats.Text do
   """
   @spec parse_library_file(binary(), keyword()) :: Model.RemoteWidgetLibrary.t() | no_return()
   def parse_library_file(input, _opts \\ []) do
+    IO.inspect(input, label: "PARSE INPUT")
+
     case do_parse_library_file(input) do
       {:ok, [imports, widgets], "", _, {_, _}, _} ->
         Model.new_remote_widget_library(imports, widgets)
