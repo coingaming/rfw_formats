@@ -275,23 +275,18 @@ defmodule RfwFormats.Text do
     |> map({:create_loop, []})
 
   defp push_loop_var(rest, [loop_var: var], context, _line, _offset) do
-    IO.inspect({"push_loop_var context before", rest, var, context}, label: "TRACE")
-
     result =
       {rest, [loop_var: var],
        Map.update(context, :loop_vars, [List.first(var)], &[List.first(var) | &1])}
 
-    IO.inspect({"push_loop_var context after", elem(result, 2)}, label: "TRACE")
     result
   end
 
   defp pop_loop_var(rest, args, context, _line, _offset) do
-    IO.inspect({"pop_loop_var", args, context}, label: "TRACE")
     {rest, args, Map.update(context, :loop_vars, [], &tl(&1))}
   end
 
-  defp create_loop([{:loop_var, identifier}, {:input, [input]}, {:output, [output]}]) do
-    IO.inspect({"create_loop input", identifier, input, output}, label: "TRACE")
+  defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, [output]}]) do
     # Flatten the input and output if necessary
     processed_input =
       case input do
@@ -302,7 +297,6 @@ defmodule RfwFormats.Text do
     processed_output =
       case output do
         [single] ->
-          IO.inspect({"create_loop processing output", single}, label: "TRACE")
           single
 
         _ ->
@@ -310,7 +304,7 @@ defmodule RfwFormats.Text do
       end
 
     result = Model.new_loop(processed_input, processed_output)
-    IO.inspect({"create_loop final", result}, label: "TRACE")
+
     result
   end
 
@@ -492,12 +486,12 @@ defmodule RfwFormats.Text do
   end
 
   defp create_widget_builder([arg_name, body]) do
-    IO.inspect({"create_widget_builder", arg_name, body}, label: "TRACE")
     Model.new_widget_builder_declaration(arg_name, body)
   end
 
   constructor_call =
     identifier
+    |> debug()
     |> ignore(string("("))
     |> ignore(whitespace)
     |> optional(
@@ -509,10 +503,13 @@ defmodule RfwFormats.Text do
         |> parsec(:constructor_argument)
       )
     )
+    |> debug()
     |> reduce({:assemble_constructor_call_args, []})
+    |> debug()
     |> ignore(whitespace)
     |> ignore(string(")"))
     |> map({:create_constructor_call, []})
+    |> debug()
 
   defp create_constructor_call([name | args]) do
     arguments = create_map(args)
@@ -526,14 +523,10 @@ defmodule RfwFormats.Text do
     |> parsec(:value)
     |> wrap()
     |> reduce({List, :flatten, []})
+    |> debug()
 
-  defp assemble_constructor_call_args([name]) do
-    [name]
-  end
-
-  defp assemble_constructor_call_args([name, args]) do
-    args = List.flatten(args)
-    [name | args]
+  defp assemble_constructor_call_args([name | args]) when is_list(args) do
+    [name | List.flatten(args)]
   end
 
   library =
@@ -547,26 +540,25 @@ defmodule RfwFormats.Text do
     )
     |> ignore(whitespace)
 
-  defcombinatorp(:value, value |> debug())
-  defcombinatorp(:list, list |> debug())
-  defcombinatorp(:map, map |> debug())
-  defcombinatorp(:loop, loop |> debug())
+  defcombinatorp(:value, value)
+  defcombinatorp(:list, list)
+  defcombinatorp(:map, map)
+  defcombinatorp(:loop, loop)
 
   defcombinatorp(
     :loop_var,
     loop_var
-    |> debug()
   )
 
-  defcombinatorp(:switch, switch |> debug())
-  defcombinatorp(:args_reference, args_reference |> debug())
-  defcombinatorp(:data_reference, data_reference |> debug())
-  defcombinatorp(:state_reference, state_reference |> debug())
-  defcombinatorp(:event_handler, event_handler |> debug())
-  defcombinatorp(:set_state_handler, set_state_handler |> debug())
-  defcombinatorp(:widget_builder, widget_builder |> debug())
-  defcombinatorp(:constructor_call, constructor_call |> debug())
-  defcombinatorp(:constructor_argument, constructor_argument |> debug())
+  defcombinatorp(:switch, switch)
+  defcombinatorp(:args_reference, args_reference)
+  defcombinatorp(:data_reference, data_reference)
+  defcombinatorp(:state_reference, state_reference)
+  defcombinatorp(:event_handler, event_handler)
+  defcombinatorp(:set_state_handler, set_state_handler)
+  defcombinatorp(:widget_builder, widget_builder)
+  defcombinatorp(:constructor_call, constructor_call)
+  defcombinatorp(:constructor_argument, constructor_argument)
   defparsecp(:do_parse_library_file, library)
 
   defparsecp(
