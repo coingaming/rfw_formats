@@ -350,7 +350,7 @@ defmodule RfwFormats.TextTest do
     result = Text.parse_library_file("widget a = b(c:data.11234567890.\"e\");")
     widget = hd(result.widgets)
     assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
-    assert %Model.DataReference{parts: ["11234567890", "e"]} = data_ref
+    assert %Model.DataReference{parts: [11_234_567_890, "e"]} = data_ref
 
     result = Text.parse_library_file("widget a = b(c: [...for d in []: d]);")
     widget = hd(result.widgets)
