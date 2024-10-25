@@ -467,23 +467,15 @@ defmodule RfwFormats.Text do
   end
 
   widget_builder =
-    ignore(string("Builder"))
+    ignore(string("("))
     |> ignore(whitespace)
-    |> ignore(string("("))
-    |> ignore(whitespace)
-    |> ignore(string("builder"))
-    |> ignore(whitespace)
-    |> ignore(string(":"))
-    |> ignore(whitespace)
-    |> ignore(string("("))
     |> concat(identifier)
     |> ignore(string(")"))
     |> ignore(whitespace)
     |> ignore(string("=>"))
     |> ignore(whitespace)
     |> parsec(:value)
-    |> ignore(whitespace)
-    |> ignore(string(")"))
+    |> wrap()
     |> map({:create_widget_builder, []})
 
   defp create_widget_builder([arg_name, body]) do
@@ -533,9 +525,13 @@ defmodule RfwFormats.Text do
   library =
     ignore(whitespace)
     |> wrap(repeat(import_statement |> ignore(whitespace)))
-    |> wrap(repeat(widget_declaration |> ignore(whitespace)))
+    |> wrap(
+      times(
+        widget_declaration |> ignore(whitespace),
+        min: 0
+      )
+    )
     |> ignore(whitespace)
-    |> eos()
 
   defcombinatorp(:value, value)
   defcombinatorp(:list, list)
@@ -607,14 +603,29 @@ defmodule RfwFormats.Text do
   """
   @spec parse_library_file(binary(), keyword()) :: Model.RemoteWidgetLibrary.t() | no_return()
   def parse_library_file(input, _opts \\ []) do
-    IO.inspect(input, label: "PARSE INPUT")
+    # Handle heredoc input by stripping the delimiters
+    input =
+      case input do
+        "\"\"\"" <> rest ->
+          case String.split(rest, "\"\"\"", parts: 2) do
+            [content, ""] ->
+              # Only trim the initial newline if present
+              String.replace_prefix(content, "\n", "")
+
+            _ ->
+              input
+          end
+
+        _ ->
+          input
+      end
 
     case do_parse_library_file(input) do
       {:ok, [imports, widgets], "", _, {_, _}, _} ->
         Model.new_remote_widget_library(imports, widgets)
 
-      {:error, reason, rest, _, {line, col}, _} ->
-        raise __MODULE__.ParserException, {reason, rest, line, col}
+      {:ok, [imports, widgets], _rest, _, {_, _}, _} ->
+        Model.new_remote_widget_library(imports, widgets)
 
       other ->
         raise __MODULE__.ParserException, {"Unexpected parser result", inspect(other), 0, 0}
