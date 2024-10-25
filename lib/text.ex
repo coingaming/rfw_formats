@@ -238,19 +238,22 @@ defmodule RfwFormats.Text do
     |> post_traverse({:check_loop_var, []})
 
   defp check_loop_var(rest, parsed, context, _line, _offset) do
-    IO.inspect({"check_loop_var called", rest, parsed, context}, label: "TRACE")
     var_name = Keyword.get(parsed, :var_name)
     raw_parts = Keyword.get(parsed, :parts, [])
     parts = if is_list(raw_parts), do: raw_parts, else: [raw_parts]
 
-    case Map.get(context, :loop_vars, []) |> Enum.find_index(&(&1 == var_name)) do
-      index when is_integer(index) ->
+    cond do
+      # Check loop variables first
+      index = Enum.find_index(Map.get(context, :loop_vars, []), &(&1 == var_name)) ->
         loop_ref = Model.new_loop_reference(index, parts)
-        IO.inspect({"check_loop_var found", loop_ref}, label: "TRACE")
         {rest, [loop_ref], context}
 
-      nil ->
-        IO.inspect({"check_loop_var not found", var_name}, label: "TRACE")
+      # Then check widget builder arguments
+      var_name in Map.get(context, :widget_args, []) ->
+        builder_ref = Model.new_widget_builder_arg_reference(var_name, parts)
+        {rest, [builder_ref], context}
+
+      true ->
         {rest, [var_name], context}
     end
   end
@@ -470,15 +473,26 @@ defmodule RfwFormats.Text do
     ignore(string("("))
     |> ignore(whitespace)
     |> concat(identifier)
+    |> post_traverse({:push_widget_arg, []})
     |> ignore(string(")"))
     |> ignore(whitespace)
     |> ignore(string("=>"))
     |> ignore(whitespace)
     |> parsec(:value)
+    |> post_traverse({:pop_widget_arg, []})
     |> wrap()
     |> map({:create_widget_builder, []})
 
+  defp push_widget_arg(rest, [arg_name], context, _line, _offset) do
+    {rest, [arg_name], Map.update(context, :widget_args, [arg_name], &[arg_name | &1])}
+  end
+
+  defp pop_widget_arg(rest, args, context, _line, _offset) do
+    {rest, args, Map.update(context, :widget_args, [], &tl(&1))}
+  end
+
   defp create_widget_builder([arg_name, body]) do
+    IO.inspect({"create_widget_builder", arg_name, body}, label: "TRACE")
     Model.new_widget_builder_declaration(arg_name, body)
   end
 
@@ -533,10 +547,10 @@ defmodule RfwFormats.Text do
     )
     |> ignore(whitespace)
 
-  defcombinatorp(:value, value)
-  defcombinatorp(:list, list)
-  defcombinatorp(:map, map)
-  defcombinatorp(:loop, loop)
+  defcombinatorp(:value, value |> debug())
+  defcombinatorp(:list, list |> debug())
+  defcombinatorp(:map, map |> debug())
+  defcombinatorp(:loop, loop |> debug())
 
   defcombinatorp(
     :loop_var,
@@ -544,15 +558,15 @@ defmodule RfwFormats.Text do
     |> debug()
   )
 
-  defcombinatorp(:switch, switch)
-  defcombinatorp(:args_reference, args_reference)
-  defcombinatorp(:data_reference, data_reference)
-  defcombinatorp(:state_reference, state_reference)
-  defcombinatorp(:event_handler, event_handler)
-  defcombinatorp(:set_state_handler, set_state_handler)
-  defcombinatorp(:widget_builder, widget_builder)
-  defcombinatorp(:constructor_call, constructor_call)
-  defcombinatorp(:constructor_argument, constructor_argument)
+  defcombinatorp(:switch, switch |> debug())
+  defcombinatorp(:args_reference, args_reference |> debug())
+  defcombinatorp(:data_reference, data_reference |> debug())
+  defcombinatorp(:state_reference, state_reference |> debug())
+  defcombinatorp(:event_handler, event_handler |> debug())
+  defcombinatorp(:set_state_handler, set_state_handler |> debug())
+  defcombinatorp(:widget_builder, widget_builder |> debug())
+  defcombinatorp(:constructor_call, constructor_call |> debug())
+  defcombinatorp(:constructor_argument, constructor_argument |> debug())
   defparsecp(:do_parse_library_file, library)
 
   defparsecp(
