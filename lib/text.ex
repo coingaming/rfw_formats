@@ -137,11 +137,13 @@ defmodule RfwFormats.Text do
 
   boolean = choice([true_literal, false_literal])
 
+  defp string_to_integer(str), do: String.to_integer(str)
+
   dot_separated_parts =
     times(
       ignore(string("."))
       |> choice([
-        ascii_string([?0..?9], min: 1) |> map({:to_string, []}),
+        ascii_string([?0..?9], min: 1) |> map({:string_to_integer, []}),
         string_literal,
         identifier
       ]),
