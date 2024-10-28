@@ -174,6 +174,7 @@ defmodule RfwFormats.Text do
   list =
     ignore(string("["))
     |> ignore(whitespace)
+    |> debug()
     |> wrap(
       optional(
         parsec(:value)
@@ -185,8 +186,17 @@ defmodule RfwFormats.Text do
         )
       )
     )
+    |> debug()
     |> ignore(whitespace)
     |> ignore(string("]"))
+    |> map({:wrap_list_values, []})
+    |> debug()
+
+  defp wrap_list_values(values) when is_list(values) do
+    values
+  end
+
+  defp wrap_list_values(value), do: [value]
 
   map =
     ignore(string("{"))
@@ -225,6 +235,8 @@ defmodule RfwFormats.Text do
   end
 
   # Helper to wrap certain values in lists when needed
+  defp wrap_value(key, %Model.WidgetBuilderArgReference{} = v) when key == "c", do: [v]
+  defp wrap_value(_key, value) when is_list(value), do: value
   defp wrap_value(_key, %Model.Loop{} = v), do: [v]
   defp wrap_value(_key, v), do: v
 
