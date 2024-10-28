@@ -449,6 +449,8 @@ defmodule RfwFormats.Text do
     |> debug()
     |> ignore(whitespace)
     |> ignore(string(";"))
+    |> ignore(whitespace)
+    |> debug()
 
   defp create_widget_declaration([name, initial_state, root]) do
     Model.new_widget_declaration(name, initial_state, root)
@@ -472,18 +474,25 @@ defmodule RfwFormats.Text do
     ignore(string("("))
     |> ignore(whitespace)
     |> concat(identifier)
+    |> debug()
     |> post_traverse({:push_widget_arg, []})
     |> ignore(string(")"))
     |> ignore(whitespace)
     |> ignore(string("=>"))
     |> ignore(whitespace)
+    |> debug()
     |> choice([
       parsec(:constructor_call),
       parsec(:switch)
     ])
+    |> debug()
     |> post_traverse({:pop_widget_arg, []})
+    |> ignore(whitespace)
+    |> optional(ignore(string(",")))
+    |> ignore(whitespace)
     |> wrap()
     |> map({:create_widget_builder, []})
+    |> debug()
 
   defp push_widget_arg(rest, [arg_name], context, _line, _offset) do
     {rest, [arg_name], Map.update(context, :widget_args, [arg_name], &[arg_name | &1])}
@@ -510,6 +519,7 @@ defmodule RfwFormats.Text do
         |> ignore(whitespace)
         |> parsec(:constructor_argument)
       )
+      |> ignore(whitespace)
     )
     |> debug()
     |> reduce({:assemble_constructor_call_args, []})
@@ -530,6 +540,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> parsec(:value)
     |> wrap()
+    |> ignore(whitespace)
     |> reduce({List, :flatten, []})
     |> debug()
 
@@ -543,6 +554,7 @@ defmodule RfwFormats.Text do
     |> repeat(widget_declaration |> ignore(whitespace))
     |> ignore(whitespace)
     |> post_traverse({:build_library, []})
+    |> eos()
 
   defp build_library(rest, parts, context, _line, _offset) do
     {imports, rest_parts} =
@@ -631,6 +643,9 @@ defmodule RfwFormats.Text do
 
       {:ok, _results, rest, _context, {line, col}, _} ->
         raise __MODULE__.ParserException, {"Failed to parse entire input", rest, line, col}
+
+      {:error, reason, rest, _context, {line, col}, _} ->
+        raise __MODULE__.ParserException, {reason, rest, line, col}
     end
   end
 
