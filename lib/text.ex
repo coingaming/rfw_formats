@@ -431,19 +431,24 @@ defmodule RfwFormats.Text do
     ignore(string("widget"))
     |> ignore(whitespace)
     |> concat(identifier)
+    |> debug()
     |> ignore(whitespace)
     |> optional(
       map
       |> wrap()
     )
+    |> debug()
     |> ignore(whitespace)
     |> ignore(string("="))
     |> ignore(whitespace)
     |> concat(widget_root)
+    |> debug()
+    |> reduce({:assemble_widget_declaration_args, []})
+    |> debug()
+    |> map({:create_widget_declaration, []})
+    |> debug()
     |> ignore(whitespace)
     |> ignore(string(";"))
-    |> reduce({:assemble_widget_declaration_args, []})
-    |> map({:create_widget_declaration, []})
 
   defp create_widget_declaration([name, initial_state, root]) do
     Model.new_widget_declaration(name, initial_state, root)
@@ -472,7 +477,10 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("=>"))
     |> ignore(whitespace)
-    |> parsec(:value)
+    |> choice([
+      parsec(:constructor_call),
+      parsec(:switch)
+    ])
     |> post_traverse({:pop_widget_arg, []})
     |> wrap()
     |> map({:create_widget_builder, []})
@@ -531,14 +539,22 @@ defmodule RfwFormats.Text do
 
   library =
     ignore(whitespace)
-    |> wrap(repeat(import_statement |> ignore(whitespace)))
-    |> wrap(
-      times(
-        widget_declaration |> ignore(whitespace),
-        min: 0
-      )
-    )
+    |> repeat(import_statement |> ignore(whitespace))
+    |> repeat(widget_declaration |> ignore(whitespace))
     |> ignore(whitespace)
+    |> post_traverse({:build_library, []})
+
+  defp build_library(rest, parts, context, _line, _offset) do
+    {imports, rest_parts} =
+      Enum.split_while(parts, fn
+        %Model.Import{} -> true
+        _ -> false
+      end)
+
+    widgets = rest_parts
+    result = Model.new_remote_widget_library(imports, widgets)
+    {rest, [result], context}
+  end
 
   defcombinatorp(:value, value)
   defcombinatorp(:list, list)
@@ -609,32 +625,12 @@ defmodule RfwFormats.Text do
   """
   @spec parse_library_file(binary(), keyword()) :: Model.RemoteWidgetLibrary.t() | no_return()
   def parse_library_file(input, _opts \\ []) do
-    # Handle heredoc input by stripping the delimiters
-    input =
-      case input do
-        "\"\"\"" <> rest ->
-          case String.split(rest, "\"\"\"", parts: 2) do
-            [content, ""] ->
-              # Only trim the initial newline if present
-              String.replace_prefix(content, "\n", "")
-
-            _ ->
-              input
-          end
-
-        _ ->
-          input
-      end
-
     case do_parse_library_file(input) do
-      {:ok, [imports, widgets], "", _, {_, _}, _} ->
-        Model.new_remote_widget_library(imports, widgets)
+      {:ok, [result], "", _context, _pos, _len} ->
+        result
 
-      {:ok, [imports, widgets], _rest, _, {_, _}, _} ->
-        Model.new_remote_widget_library(imports, widgets)
-
-      other ->
-        raise __MODULE__.ParserException, {"Unexpected parser result", inspect(other), 0, 0}
+      {:ok, _results, rest, _context, {line, col}, _} ->
+        raise __MODULE__.ParserException, {"Failed to parse entire input", rest, line, col}
     end
   end
 
