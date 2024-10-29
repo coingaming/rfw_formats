@@ -174,7 +174,6 @@ defmodule RfwFormats.Text do
   list =
     ignore(string("["))
     |> ignore(whitespace)
-    |> debug()
     |> wrap(
       optional(
         parsec(:value)
@@ -186,11 +185,9 @@ defmodule RfwFormats.Text do
         )
       )
     )
-    |> debug()
     |> ignore(whitespace)
     |> ignore(string("]"))
     |> map({:wrap_list_values, []})
-    |> debug()
 
   defp wrap_list_values(values) when is_list(values) do
     values
@@ -443,26 +440,20 @@ defmodule RfwFormats.Text do
     ignore(string("widget"))
     |> ignore(whitespace)
     |> concat(identifier)
-    |> debug()
     |> ignore(whitespace)
     |> optional(
       map
       |> wrap()
     )
-    |> debug()
     |> ignore(whitespace)
     |> ignore(string("="))
     |> ignore(whitespace)
     |> concat(widget_root)
-    |> debug()
     |> reduce({:assemble_widget_declaration_args, []})
-    |> debug()
     |> map({:create_widget_declaration, []})
-    |> debug()
     |> ignore(whitespace)
     |> ignore(string(";"))
     |> ignore(whitespace)
-    |> debug()
 
   defp create_widget_declaration([name, initial_state, root]) do
     Model.new_widget_declaration(name, initial_state, root)
@@ -486,25 +477,21 @@ defmodule RfwFormats.Text do
     ignore(string("("))
     |> ignore(whitespace)
     |> concat(identifier)
-    |> debug()
     |> post_traverse({:push_widget_arg, []})
     |> ignore(string(")"))
     |> ignore(whitespace)
     |> ignore(string("=>"))
     |> ignore(whitespace)
-    |> debug()
     |> choice([
       parsec(:constructor_call),
       parsec(:switch)
     ])
-    |> debug()
     |> post_traverse({:pop_widget_arg, []})
     |> ignore(whitespace)
     |> optional(ignore(string(",")))
     |> ignore(whitespace)
     |> wrap()
     |> map({:create_widget_builder, []})
-    |> debug()
 
   defp push_widget_arg(rest, [arg_name], context, _line, _offset) do
     {rest, [arg_name], Map.update(context, :widget_args, [arg_name], &[arg_name | &1])}
@@ -520,7 +507,6 @@ defmodule RfwFormats.Text do
 
   constructor_call =
     identifier
-    |> debug()
     |> ignore(string("("))
     |> ignore(whitespace)
     |> optional(
@@ -533,13 +519,10 @@ defmodule RfwFormats.Text do
       )
       |> ignore(whitespace)
     )
-    |> debug()
     |> reduce({:assemble_constructor_call_args, []})
-    |> debug()
     |> ignore(whitespace)
     |> ignore(string(")"))
     |> map({:create_constructor_call, []})
-    |> debug()
 
   defp create_constructor_call([name | args]) do
     arguments = create_map(args)
@@ -554,7 +537,6 @@ defmodule RfwFormats.Text do
     |> wrap()
     |> ignore(whitespace)
     |> reduce({List, :flatten, []})
-    |> debug()
 
   defp assemble_constructor_call_args([name | args]) when is_list(args) do
     [name | List.flatten(args)]
