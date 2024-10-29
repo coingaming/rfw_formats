@@ -542,8 +542,16 @@ defmodule RfwFormats.Text do
     [name | List.flatten(args)]
   end
 
+  valid_library_start =
+    choice([
+      string("import"),
+      string("widget"),
+      empty() |> eos()
+    ])
+
   library =
     ignore(whitespace)
+    |> lookahead(valid_library_start)
     |> repeat(import_statement |> ignore(whitespace))
     |> repeat(widget_declaration |> ignore(whitespace))
     |> ignore(whitespace)
@@ -609,37 +617,74 @@ defmodule RfwFormats.Text do
     end
   end
 
-  @doc """
-  Parse a Remote Flutter Widgets text data file.
-  """
-  @spec parse_data_file(binary()) :: Model.dynamic_map() | no_return()
-  def parse_data_file(input) do
-    case do_parse_data_file(input) do
-      {:ok, [result], "", _, {_, _}, _} ->
-        result
+  defp transform_error(message, rest, {line, col}) when is_binary(message) do
+    col = col + 1
 
-      {:error, reason, rest, _, {line, col}, _} ->
-        raise __MODULE__.ParserException, {reason, rest, line, col}
+    found =
+      case rest do
+        <<>> ->
+          "<EOF>"
 
-      other ->
-        raise __MODULE__.ParserException, {"Unexpected parser result", inspect(other), 0, 0}
-    end
-  end
+        _ ->
+          case String.split(rest, "\n") do
+            [first | _] -> String.slice(first, 0, 10)
+            [] -> ""
+          end
+      end
 
-  @doc """
-  Parses a Remote Flutter Widgets text library file.
-  """
-  @spec parse_library_file(binary(), keyword()) :: Model.RemoteWidgetLibrary.t() | no_return()
-  def parse_library_file(input, _opts \\ []) do
-    case do_parse_library_file(input) do
-      {:ok, [result], "", _context, _pos, _len} ->
-        result
+    cond do
+      # Special case for import/widget keywords
+      String.contains?(message, "string \"import\" or string \"widget\"") ->
+        "Expected keywords \"import\" or \"widget\", or end of file but found #{found} at line #{line} column #{col}."
 
-      {:ok, _results, rest, _context, {line, col}, _} ->
-        raise __MODULE__.ParserException, {"Failed to parse entire input", rest, line, col}
+      # Handle existing expected vs found pattern
+      String.contains?(message, "expected") ->
+        expected = String.replace(message, "expected ", "")
+        "Expected #{expected} but found #{found} at line #{line} column #{col}"
 
-      {:error, reason, rest, _context, {line, col}, _} ->
-        raise __MODULE__.ParserException, {reason, rest, line, col}
+      # Handle unexpected character pattern with context
+      String.starts_with?(message, "unexpected character") ->
+        <<char::utf8, _::binary>> = rest
+        code = Integer.to_string(char, 16) |> String.upcase() |> String.pad_leading(4, "0")
+
+        context =
+          cond do
+            String.contains?(message, "after") ->
+              "after #{String.split(message, "after ") |> List.last()}"
+
+            String.contains?(message, "inside") ->
+              "inside #{String.split(message, "inside ") |> List.last()}"
+
+            String.contains?(message, "in") ->
+              "in #{String.split(message, "in ") |> List.last()}"
+
+            true ->
+              ""
+          end
+
+        "Unexpected character U+#{code} (\"#{<<char::utf8>>}\") #{context} at line #{line} column #{col}"
+
+      # Handle end of file pattern
+      String.contains?(message, "end of file") ->
+        context =
+          case String.split(message, "end of file") do
+            [_, ctx] -> String.trim(ctx)
+            _ -> ""
+          end
+
+        "Unexpected end of file #{context} at line #{line} column #{col}"
+
+      # Handle semantic errors
+      message in [
+        "args is a reserved word",
+        "Switch has duplicate cases for key 0",
+        "Switch has multiple default cases"
+      ] ->
+        "#{message} at line #{line} column #{col}"
+
+      # Default case - pass through any unhandled messages
+      true ->
+        "#{message} at line #{line} column #{col}"
     end
   end
 
@@ -657,8 +702,45 @@ defmodule RfwFormats.Text do
     end
 
     @impl true
-    def message(%{message: message, rest: rest, line: line, column: column}) do
-      "#{inspect(message)} at line #{line}, column #{column}. Remaining input: #{inspect(rest)}"
+    def message(%{message: message}) do
+      message
+    end
+  end
+
+  @doc """
+  Parse a Remote Flutter Widgets text data file.
+  """
+  @spec parse_data_file(binary()) :: Model.dynamic_map() | no_return()
+  def parse_data_file(input) do
+    case do_parse_data_file(input) do
+      {:ok, [result], "", _, {_, _}, _} ->
+        result
+
+      {:error, reason, rest, _, {line, col}, _} ->
+        error_msg = transform_error(reason, rest, {line, col})
+        raise ParserException, {error_msg, rest, line, col}
+
+      other ->
+        raise ParserException, {"Unexpected parser result", inspect(other), 0, 0}
+    end
+  end
+
+  @doc """
+  Parses a Remote Flutter Widgets text library file.
+  """
+  @spec parse_library_file(binary(), keyword()) :: Model.RemoteWidgetLibrary.t() | no_return()
+  def parse_library_file(input, _opts \\ []) do
+    case do_parse_library_file(input) do
+      {:ok, [result], "", _context, _pos, _len} ->
+        result
+
+      {:ok, _results, rest, _context, {line, col}, _} ->
+        error_msg = transform_error("expected end of file", rest, {line, col})
+        raise ParserException, {error_msg, rest, line, col}
+
+      {:error, reason, rest, _context, {line, col}, _} ->
+        error_msg = transform_error(reason, rest, {line, col})
+        raise ParserException, {error_msg, rest, line, col}
     end
   end
 end
