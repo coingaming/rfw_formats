@@ -617,9 +617,7 @@ defmodule RfwFormats.Text do
     end
   end
 
-  defp transform_error(message, rest, {line, col}) when is_binary(message) do
-    col = col + 1
-
+  defp transform_error(message, rest, {line, _col}) when is_binary(message) do
     found =
       case rest do
         <<>> ->
@@ -635,12 +633,12 @@ defmodule RfwFormats.Text do
     cond do
       # Special case for import/widget keywords
       String.contains?(message, "string \"import\" or string \"widget\"") ->
-        "Expected keywords \"import\" or \"widget\", or end of file but found #{found} at line #{line} column #{col}."
+        "Expected keywords \"import\" or \"widget\", or end of file but found #{found} at line #{line}."
 
       # Handle existing expected vs found pattern
       String.contains?(message, "expected") ->
         expected = String.replace(message, "expected ", "")
-        "Expected #{expected} but found #{found} at line #{line} column #{col}"
+        "Expected #{expected} but found #{found} at line #{line}"
 
       # Handle unexpected character pattern with context
       String.starts_with?(message, "unexpected character") ->
@@ -662,7 +660,7 @@ defmodule RfwFormats.Text do
               ""
           end
 
-        "Unexpected character U+#{code} (\"#{<<char::utf8>>}\") #{context} at line #{line} column #{col}"
+        "Unexpected character U+#{code} (\"#{<<char::utf8>>}\") #{context} at line #{line}"
 
       # Handle end of file pattern
       String.contains?(message, "end of file") ->
@@ -672,7 +670,7 @@ defmodule RfwFormats.Text do
             _ -> ""
           end
 
-        "Unexpected end of file #{context} at line #{line} column #{col}"
+        "Unexpected end of file #{context} at line #{line}"
 
       # Handle semantic errors
       message in [
@@ -680,24 +678,23 @@ defmodule RfwFormats.Text do
         "Switch has duplicate cases for key 0",
         "Switch has multiple default cases"
       ] ->
-        "#{message} at line #{line} column #{col}"
+        "#{message} at line #{line}"
 
       # Default case - pass through any unhandled messages
       true ->
-        "#{message} at line #{line} column #{col}"
+        "#{message} at line #{line}"
     end
   end
 
   defmodule ParserException do
-    defexception [:message, :rest, :line, :column]
+    defexception [:message, :rest, :line]
 
     @impl true
-    def exception({message, rest, line, column}) do
+    def exception({message, rest, line}) do
       %__MODULE__{
         message: message,
         rest: rest,
-        line: line,
-        column: column
+        line: line
       }
     end
 
@@ -716,12 +713,12 @@ defmodule RfwFormats.Text do
       {:ok, [result], "", _, {_, _}, _} ->
         result
 
-      {:error, reason, rest, _, {line, col}, _} ->
-        error_msg = transform_error(reason, rest, {line, col})
-        raise ParserException, {error_msg, rest, line, col}
+      {:error, reason, rest, _, {line, _}, _} ->
+        error_msg = transform_error(reason, rest, {line, 0})
+        raise ParserException, {error_msg, rest, line}
 
       other ->
-        raise ParserException, {"Unexpected parser result", inspect(other), 0, 0}
+        raise ParserException, {"Unexpected parser result", inspect(other), 0}
     end
   end
 
@@ -734,13 +731,13 @@ defmodule RfwFormats.Text do
       {:ok, [result], "", _context, _pos, _len} ->
         result
 
-      {:ok, _results, rest, _context, {line, col}, _} ->
-        error_msg = transform_error("expected end of file", rest, {line, col})
-        raise ParserException, {error_msg, rest, line, col}
+      {:ok, _results, rest, _context, {line, _}, _} ->
+        error_msg = transform_error("expected end of file", rest, {line, 0})
+        raise ParserException, {error_msg, rest, line}
 
-      {:error, reason, rest, _context, {line, col}, _} ->
-        error_msg = transform_error(reason, rest, {line, col})
-        raise ParserException, {error_msg, rest, line, col}
+      {:error, reason, rest, _context, {line, _}, _} ->
+        error_msg = transform_error(reason, rest, {line, 0})
+        raise ParserException, {error_msg, rest, line}
     end
   end
 end
