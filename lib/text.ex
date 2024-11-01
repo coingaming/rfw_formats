@@ -509,7 +509,12 @@ defmodule RfwFormats.Text do
     end
   end
 
-  defp push_widget_arg(rest, [arg_name], context, _line, _offset) do
+  defp push_widget_arg(rest, [arg_name], context, {line, _col}, _offset) do
+    if arg_name in ["args", "data", "event", "false", "set", "state", "true"] do
+      error_msg = transform_error("#{arg_name} is a reserved word", rest, {line, 0})
+      raise __MODULE__.ParserException, {error_msg, rest, line}
+    end
+
     {rest, [arg_name], Map.update(context, :widget_args, [arg_name], &[arg_name | &1])}
   end
 
@@ -592,12 +597,7 @@ defmodule RfwFormats.Text do
   defcombinatorp(:list, list)
   defcombinatorp(:map, map)
   defcombinatorp(:loop, loop)
-
-  defcombinatorp(
-    :loop_var,
-    loop_var
-  )
-
+  defcombinatorp(:loop_var, loop_var)
   defcombinatorp(:switch, switch)
   defcombinatorp(:args_reference, args_reference)
   defcombinatorp(:data_reference, data_reference)
@@ -696,7 +696,7 @@ defmodule RfwFormats.Text do
         "Switch has duplicate cases for key 0",
         "Switch has multiple default cases"
       ] ->
-        "#{message} at line #{line}"
+        "#{message} at line #{line}."
 
       # Default case - pass through any unhandled messages
       true ->
