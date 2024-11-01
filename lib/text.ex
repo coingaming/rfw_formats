@@ -635,75 +635,6 @@ defmodule RfwFormats.Text do
     end
   end
 
-  defp transform_error(message, rest, {line, _col}) when is_binary(message) do
-    found =
-      case rest do
-        <<>> ->
-          "<EOF>"
-
-        _ ->
-          case String.split(rest, "\n") do
-            [first | _] -> String.slice(first, 0, 10)
-            [] -> ""
-          end
-      end
-
-    cond do
-      # Special case for import/widget keywords
-      String.contains?(message, "string \"import\" or string \"widget\"") ->
-        "Expected keywords \"import\" or \"widget\", or end of file but found #{found} at line #{line}."
-
-      # Handle existing expected vs found pattern
-      String.contains?(message, "expected") ->
-        expected = String.replace(message, "expected ", "")
-        "Expected #{expected} but found #{found} at line #{line}"
-
-      # Handle unexpected character pattern with context
-      String.starts_with?(message, "unexpected character") ->
-        <<char::utf8, _::binary>> = rest
-        code = Integer.to_string(char, 16) |> String.upcase() |> String.pad_leading(4, "0")
-
-        context =
-          cond do
-            String.contains?(message, "after") ->
-              "after #{String.split(message, "after ") |> List.last()}"
-
-            String.contains?(message, "inside") ->
-              "inside #{String.split(message, "inside ") |> List.last()}"
-
-            String.contains?(message, "in") ->
-              "in #{String.split(message, "in ") |> List.last()}"
-
-            true ->
-              ""
-          end
-
-        "Unexpected character U+#{code} (\"#{<<char::utf8>>}\") #{context} at line #{line}"
-
-      # Handle end of file pattern
-      String.contains?(message, "end of file") ->
-        context =
-          case String.split(message, "end of file") do
-            [_, ctx] -> String.trim(ctx)
-            _ -> ""
-          end
-
-        "Unexpected end of file #{context} at line #{line}"
-
-      # Handle semantic errors
-      message in [
-        "args is a reserved word",
-        "Switch has duplicate cases for key 0",
-        "Switch has multiple default cases"
-      ] ->
-        "#{message} at line #{line}."
-
-      # Default case - pass through any unhandled messages
-      true ->
-        "#{message} at line #{line}"
-    end
-  end
-
   defmodule ParserException do
     defexception [:message, :rest, :line]
 
@@ -717,8 +648,111 @@ defmodule RfwFormats.Text do
     end
 
     @impl true
-    def message(%{message: message}) do
-      message
+    def message(%{message: message}), do: message
+  end
+
+  # Error handling utilities
+  defp format_found_token(<<>>) do
+    "<EOF>"
+  end
+
+  defp format_found_token(rest) do
+    case String.split(rest, "\n") do
+      [first | _] -> String.slice(first, 0, 10)
+      [] -> ""
+    end
+  end
+
+  defp extract_context(message) do
+    cond do
+      String.contains?(message, "after") ->
+        "after " <> (String.split(message, "after ") |> List.last())
+
+      String.contains?(message, "inside") ->
+        "inside " <> (String.split(message, "inside ") |> List.last())
+
+      String.contains?(message, "in") ->
+        "in " <> (String.split(message, "in ") |> List.last())
+
+      true ->
+        ""
+    end
+  end
+
+  defp format_unexpected_char_error(rest) do
+    <<char::utf8, _::binary>> = rest
+    code = Integer.to_string(char, 16) |> String.upcase() |> String.pad_leading(4, "0")
+    {code, <<char::utf8>>}
+  end
+
+  defp extract_expected(message) do
+    String.replace(message, "expected ", "")
+  end
+
+  # Main error transformation
+  @semantic_errors [
+    "args is a reserved word",
+    "Switch has duplicate cases for key 0",
+    "Switch has multiple default cases"
+  ]
+
+  defp transform_error(message, rest, {line, _col}) when is_binary(message) do
+    found_token = format_found_token(rest)
+
+    base_message =
+      cond do
+        # Keyword errors (import/widget)
+        String.contains?(message, "string \"import\" or string \"widget\"") ->
+          "Expected keywords \"import\" or \"widget\", or end of file but found #{found_token}"
+
+        # Expected vs found pattern
+        String.contains?(message, "expected") ->
+          "Expected #{extract_expected(message)} but found #{found_token}"
+
+        # Unexpected character with context
+        String.starts_with?(message, "unexpected character") ->
+          {code, char} = format_unexpected_char_error(rest)
+          context = extract_context(message)
+          "Unexpected character U+#{code} (\"#{char}\") #{context}"
+
+        # End of file errors
+        String.contains?(message, "end of file") ->
+          context =
+            case String.split(message, "end of file") do
+              [_, ctx] -> String.trim(ctx)
+              _ -> ""
+            end
+
+          "Unexpected end of file #{context}"
+
+        # Semantic errors
+        message in @semantic_errors ->
+          "#{message}"
+
+        # Default case
+        true ->
+          "#{message}"
+      end
+
+    "#{base_message} at line #{line}."
+  end
+
+  # Unified parse result handler
+  defp handle_parse_result(parse_result, parser_type) do
+    case parse_result do
+      {:ok, [result], "", _, {_, _}, _} ->
+        result
+
+      {:ok, _results, rest, _context, {line, _}, _} when parser_type == :library ->
+        error_msg = transform_error("expected end of file", rest, {line, 0})
+        raise ParserException, {error_msg, rest, line}
+
+      {:error, reason, rest, _, {line, _}, _} ->
+        error_msg = transform_error(reason, rest, {line, 0})
+        raise ParserException, {error_msg, rest, line}
+
+      _ ->
+        raise ParserException, {"Unexpected parser result", "", 0}
     end
   end
 
@@ -727,17 +761,9 @@ defmodule RfwFormats.Text do
   """
   @spec parse_data_file(binary()) :: Model.dynamic_map() | no_return()
   def parse_data_file(input) do
-    case do_parse_data_file(input) do
-      {:ok, [result], "", _, {_, _}, _} ->
-        result
-
-      {:error, reason, rest, _, {line, _}, _} ->
-        error_msg = transform_error(reason, rest, {line, 0})
-        raise ParserException, {error_msg, rest, line}
-
-      other ->
-        raise ParserException, {"Unexpected parser result", inspect(other), 0}
-    end
+    input
+    |> do_parse_data_file()
+    |> handle_parse_result(:data)
   end
 
   @doc """
@@ -745,17 +771,8 @@ defmodule RfwFormats.Text do
   """
   @spec parse_library_file(binary(), keyword()) :: Model.RemoteWidgetLibrary.t() | no_return()
   def parse_library_file(input, _opts \\ []) do
-    case do_parse_library_file(input) do
-      {:ok, [result], "", _context, _pos, _len} ->
-        result
-
-      {:ok, _results, rest, _context, {line, _}, _} ->
-        error_msg = transform_error("expected end of file", rest, {line, 0})
-        raise ParserException, {error_msg, rest, line}
-
-      {:error, reason, rest, _context, {line, _}, _} ->
-        error_msg = transform_error(reason, rest, {line, 0})
-        raise ParserException, {error_msg, rest, line}
-    end
+    input
+    |> do_parse_library_file()
+    |> handle_parse_result(:library)
   end
 end
