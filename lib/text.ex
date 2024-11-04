@@ -328,19 +328,24 @@ defmodule RfwFormats.Text do
   end
 
   defp validate_case_value(rest, [value, case_key], context, line, _offset) do
-    case value do
-      %Model.ConstructorCall{} ->
+    case {Map.get(context, :in_widget_builder, false), value} do
+      # In widget builder context, enforce widget rules
+      {true, %Model.ConstructorCall{}} ->
         {rest, [value, case_key], context}
 
-      %Model.Switch{} ->
+      {true, %Model.Switch{}} ->
         {rest, [value, case_key], context}
 
-      %Model.WidgetBuilderDeclaration{} ->
+      {true, %Model.WidgetBuilderDeclaration{}} ->
         {rest, [value, case_key], context}
 
-      other when context.in_switch ->
+      {true, other} ->
         raise __MODULE__.ParserException,
-              {"Invalid switch case value: #{inspect(other)}", rest, line}
+              {"Invalid widget builder value: #{inspect(other)}", rest, line}
+
+      # Outside widget builder context, allow any value
+      {false, _} ->
+        {rest, [value, case_key], context}
     end
   end
 
