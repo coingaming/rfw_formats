@@ -181,6 +181,7 @@ defmodule RfwFormats.Text do
           parsec(:loop) |> map({:wrap_loop_in_list, []}),
           parsec(:value)
         ])
+        |> debug()
         |> repeat(
           ignore(whitespace)
           |> ignore(string(","))
@@ -194,9 +195,11 @@ defmodule RfwFormats.Text do
         |> optional(ignore(string(",")))
       )
     )
+    |> debug()
     |> ignore(whitespace)
     |> ignore(string("]"))
     |> map({:process_list_values, []})
+    |> debug()
 
   defp wrap_loop_in_list(loop), do: [loop]
 
@@ -209,10 +212,12 @@ defmodule RfwFormats.Text do
     |> wrap(
       optional(
         choice([string_literal, identifier])
+        |> debug()
         |> ignore(whitespace)
         |> ignore(string(":"))
         |> ignore(whitespace)
         |> parsec(:value)
+        |> debug()
         |> repeat(
           ignore(whitespace)
           |> ignore(string(","))
@@ -278,15 +283,20 @@ defmodule RfwFormats.Text do
     |> pre_traverse(:push_loop_context)
     |> ignore(whitespace)
     |> unwrap_and_tag(identifier, :loop_var)
+    |> debug()
     |> ignore(whitespace)
     |> ignore(string("in"))
     |> ignore(whitespace)
     |> unwrap_and_tag(parsec(:value), :input)
+    |> debug()
     |> ignore(string(":"))
     |> ignore(whitespace)
     |> unwrap_and_tag(parsec(:value), :output)
+    |> debug()
     |> post_traverse(:create_loop_with_context)
+    |> debug()
     |> post_traverse(:pop_loop_context)
+    |> debug()
 
   defp push_loop_context(rest, args, context, _line, _offset) do
     {rest, args, Map.put(context, :in_loop, true)}
@@ -527,12 +537,14 @@ defmodule RfwFormats.Text do
     ignore(string("("))
     |> ignore(whitespace)
     |> concat(identifier)
+    |> debug()
     |> post_traverse({:push_widget_arg, []})
     |> ignore(string(")"))
     |> ignore(whitespace)
     |> ignore(string("=>"))
     |> ignore(whitespace)
     |> parsec(:value)
+    |> debug()
     |> post_traverse({:validate_widget_builder_value, []})
     |> post_traverse({:pop_widget_arg, []})
     |> ignore(whitespace)
@@ -575,6 +587,7 @@ defmodule RfwFormats.Text do
 
   constructor_call =
     identifier
+    |> debug()
     |> ignore(string("("))
     |> ignore(whitespace)
     |> optional(
@@ -585,6 +598,7 @@ defmodule RfwFormats.Text do
         |> ignore(whitespace)
         |> parsec(:constructor_argument)
       )
+      |> debug()
       |> ignore(whitespace)
     )
     |> reduce({:assemble_constructor_call_args, []})
