@@ -176,12 +176,20 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> wrap(
       optional(
-        parsec(:value)
+        choice([
+          # Reference existing loop combinator
+          parsec(:loop) |> map({:wrap_loop_in_list, []}),
+          parsec(:value)
+        ])
         |> repeat(
           ignore(whitespace)
           |> ignore(string(","))
           |> ignore(whitespace)
-          |> parsec(:value)
+          |> choice([
+            # Reference existing loop combinator
+            parsec(:loop) |> map({:wrap_loop_in_list, []}),
+            parsec(:value)
+          ])
         )
         |> optional(ignore(string(",")))
       )
@@ -190,7 +198,8 @@ defmodule RfwFormats.Text do
     |> ignore(string("]"))
     |> map({:process_list_values, []})
 
-  # Matches Dart's simpler list processing
+  defp wrap_loop_in_list(loop), do: [loop]
+
   defp process_list_values(nil), do: []
   defp process_list_values(values) when is_list(values), do: values
 
@@ -220,21 +229,19 @@ defmodule RfwFormats.Text do
     |> ignore(string("}"))
     |> map({:create_map, []})
 
+  defp wrap_map_value(_key, value) when is_list(value), do: value
+  defp wrap_map_value(_key, %Model.Loop{} = loop), do: [loop]
+  defp wrap_map_value(_key, v), do: v
+
   defp create_map([]), do: %{}
 
   defp create_map(pairs) do
     Enum.chunk_every(pairs, 2)
     |> Enum.reduce(%{}, fn
       [_k, :__null__], acc -> acc
-      [k, v], acc -> Map.put(acc, k, wrap_value(k, v))
+      [k, v], acc -> Map.put(acc, k, wrap_map_value(k, v))
     end)
   end
-
-  # Helper to wrap certain values in lists when needed
-
-  defp wrap_value(_key, value) when is_list(value), do: value
-
-  defp wrap_value(_key, v), do: v
 
   loop_var =
     identifier
@@ -268,6 +275,7 @@ defmodule RfwFormats.Text do
 
   loop =
     ignore(string("...for"))
+    |> pre_traverse(:push_loop_context)
     |> ignore(whitespace)
     |> unwrap_and_tag(identifier, :loop_var)
     |> ignore(whitespace)
@@ -277,11 +285,27 @@ defmodule RfwFormats.Text do
     |> ignore(string(":"))
     |> ignore(whitespace)
     |> unwrap_and_tag(parsec(:value), :output)
-    |> wrap()
-    |> map({:create_loop, []})
+    |> post_traverse(:create_loop_with_context)
+    |> post_traverse(:pop_loop_context)
 
-  defp create_loop([{:loop_var, _var}, {:input, input}, {:output, output}]) do
-    Model.new_loop(input, output)
+  defp push_loop_context(rest, args, context, _line, _offset) do
+    {rest, args, Map.put(context, :in_loop, true)}
+  end
+
+  defp pop_loop_context(rest, args, context, _line, _offset) do
+    {rest, args, Map.delete(context, :in_loop)}
+  end
+
+  defp create_loop_with_context(rest, args, context, _line, _offset) do
+    loop = Model.new_loop(Keyword.get(args, :input), Keyword.get(args, :output))
+
+    result =
+      case Map.get(context, :in_loop) do
+        true -> [loop]
+        _ -> loop
+      end
+
+    {rest, [result], context}
   end
 
   switch =
