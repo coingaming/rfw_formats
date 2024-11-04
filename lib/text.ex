@@ -183,17 +183,16 @@ defmodule RfwFormats.Text do
           |> ignore(whitespace)
           |> parsec(:value)
         )
+        |> optional(ignore(string(",")))
       )
     )
     |> ignore(whitespace)
     |> ignore(string("]"))
-    |> map({:wrap_list_values, []})
+    |> map({:process_list_values, []})
 
-  defp wrap_list_values(values) when is_list(values) do
-    values
-  end
-
-  defp wrap_list_values(value), do: [value]
+  # Matches Dart's simpler list processing
+  defp process_list_values(nil), do: []
+  defp process_list_values(values) when is_list(values), do: values
 
   map =
     ignore(string("{"))
@@ -232,9 +231,9 @@ defmodule RfwFormats.Text do
   end
 
   # Helper to wrap certain values in lists when needed
-  defp wrap_value(key, %Model.WidgetBuilderArgReference{} = v) when key == "c", do: [v]
+
   defp wrap_value(_key, value) when is_list(value), do: value
-  defp wrap_value(_key, %Model.Loop{} = v), do: [v]
+
   defp wrap_value(_key, v), do: v
 
   loop_var =
@@ -270,55 +269,24 @@ defmodule RfwFormats.Text do
   loop =
     ignore(string("...for"))
     |> ignore(whitespace)
-    |> tag(identifier, :loop_var)
-    |> post_traverse({:push_loop_var, []})
+    |> unwrap_and_tag(identifier, :loop_var)
     |> ignore(whitespace)
     |> ignore(string("in"))
     |> ignore(whitespace)
-    |> tag(parsec(:value), :input)
+    |> unwrap_and_tag(parsec(:value), :input)
     |> ignore(string(":"))
     |> ignore(whitespace)
-    |> tag(parsec(:value), :output)
-    |> post_traverse({:pop_loop_var, []})
+    |> unwrap_and_tag(parsec(:value), :output)
     |> wrap()
     |> map({:create_loop, []})
 
-  defp push_loop_var(rest, [loop_var: var], context, _line, _offset) do
-    result =
-      {rest, [loop_var: var],
-       Map.update(context, :loop_vars, [List.first(var)], &[List.first(var) | &1])}
-
-    result
-  end
-
-  defp pop_loop_var(rest, args, context, _line, _offset) do
-    {rest, args, Map.update(context, :loop_vars, [], &tl(&1))}
-  end
-
-  defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, [output]}]) do
-    # Flatten the input and output if necessary
-    processed_input =
-      case input do
-        [inner] -> inner
-        _ -> input
-      end
-
-    processed_output =
-      case output do
-        [single] ->
-          single
-
-        _ ->
-          output
-      end
-
-    result = Model.new_loop(processed_input, processed_output)
-
-    result
+  defp create_loop([{:loop_var, _var}, {:input, input}, {:output, output}]) do
+    Model.new_loop(input, output)
   end
 
   switch =
     ignore(string("switch"))
+    |> pre_traverse(:push_switch_context)
     |> ignore(whitespace)
     |> unwrap_and_tag(parsec(:value), :input)
     |> ignore(whitespace)
@@ -327,14 +295,14 @@ defmodule RfwFormats.Text do
     |> tag(
       times(
         choice([
-          ignore(string("default"))
-          |> replace(nil),
+          ignore(string("default")) |> replace(nil),
           parsec(:value)
         ])
         |> ignore(whitespace)
         |> ignore(string(":"))
         |> ignore(whitespace)
         |> parsec(:value)
+        |> post_traverse(:validate_case_value)
         |> wrap()
         |> ignore(whitespace)
         |> optional(ignore(string(",")))
@@ -343,10 +311,38 @@ defmodule RfwFormats.Text do
       ),
       :cases
     )
+    |> post_traverse(:pop_switch_context)
     |> ignore(whitespace)
     |> ignore(string("}"))
     |> wrap()
     |> map({:create_switch, []})
+
+  defp push_switch_context(rest, args, context, _line, _offset) do
+    updated_context = Map.put(context, :in_switch, true)
+    {rest, args, updated_context}
+  end
+
+  defp pop_switch_context(rest, args, context, _line, _offset) do
+    updated_context = Map.delete(context, :in_switch)
+    {rest, args, updated_context}
+  end
+
+  defp validate_case_value(rest, [value, case_key], context, line, _offset) do
+    case value do
+      %Model.ConstructorCall{} ->
+        {rest, [value, case_key], context}
+
+      %Model.Switch{} ->
+        {rest, [value, case_key], context}
+
+      %Model.WidgetBuilderDeclaration{} ->
+        {rest, [value, case_key], context}
+
+      other when context.in_switch ->
+        raise __MODULE__.ParserException,
+              {"Invalid switch case value: #{inspect(other)}", rest, line}
+    end
+  end
 
   defp create_switch(input: input, cases: cases) do
     Model.new_switch(input, create_map(List.flatten(cases)))
@@ -392,8 +388,33 @@ defmodule RfwFormats.Text do
     |> wrap()
     |> map({:create_event_handler, []})
 
-  defp create_event_handler([event_name, event_arguments]) do
-    Model.new_event_handler(event_name, event_arguments)
+  defp create_event_handler([event_name, event_arguments]) when is_binary(event_name) do
+    validated_args = validate_event_arguments(event_arguments)
+    Model.new_event_handler(event_name, validated_args)
+  end
+
+  defp validate_event_arguments(%{} = args) do
+    Enum.reduce(args, %{}, fn
+      {key, value}, acc when is_binary(key) ->
+        Map.put(acc, key, validate_event_argument_value(value))
+
+      {key, _}, _acc ->
+        raise __MODULE__.ParserException,
+              {"Event argument key must be a string: #{inspect(key)}", "", 0}
+    end)
+  end
+
+  defp validate_event_argument_value(value) when is_number(value), do: value
+  defp validate_event_argument_value(value) when is_binary(value), do: value
+  defp validate_event_argument_value(value) when is_boolean(value), do: value
+  defp validate_event_argument_value(%Model.ArgsReference{} = ref), do: ref
+  defp validate_event_argument_value(%Model.DataReference{} = ref), do: ref
+  defp validate_event_argument_value(%Model.StateReference{} = ref), do: ref
+  defp validate_event_argument_value(%Model.LoopReference{} = ref), do: ref
+  defp validate_event_argument_value(%Model.WidgetBuilderArgReference{} = ref), do: ref
+
+  defp validate_event_argument_value(invalid) do
+    raise __MODULE__.ParserException, {"Invalid event argument value: #{inspect(invalid)}", "", 0}
   end
 
   set_state_handler =
@@ -543,18 +564,51 @@ defmodule RfwFormats.Text do
     |> map({:create_constructor_call, []})
 
   defp create_constructor_call([name | args]) do
-    arguments = create_map(args)
+    arguments =
+      args
+      |> Enum.chunk_every(2)
+      |> Enum.map(fn [k, v] -> {k, v} end)
+      |> Enum.into(%{})
+
     Model.new_constructor_call(name, arguments)
   end
 
   constructor_argument =
     identifier
+    |> pre_traverse(:track_argument_name)
     |> ignore(string(":"))
     |> ignore(whitespace)
     |> parsec(:value)
+    |> post_traverse(:wrap_argument_value)
     |> wrap()
     |> ignore(whitespace)
     |> reduce({List, :flatten, []})
+
+  # Add these helper functions:
+  defp track_argument_name(rest, [name], context, _line, _offset) do
+    updated_context = Map.put(context, :current_argument, name)
+    {rest, [name], updated_context}
+  end
+
+  defp wrap_argument_value(rest, [value, name], context, _line, _offset) do
+    arg_name = Map.get(context, :current_argument)
+
+    wrapped_value =
+      cond do
+        arg_name in ["children", "actions", "items"] and not is_list(value) ->
+          [value]
+
+        true ->
+          value
+      end
+
+    {rest, [wrapped_value, name], context}
+  end
+
+  # Add fallback clause for other patterns
+  defp wrap_argument_value(rest, values, context, _line, _offset) do
+    {rest, values, context}
+  end
 
   defp assemble_constructor_call_args([name | args]) when is_list(args) do
     [name | List.flatten(args)]
