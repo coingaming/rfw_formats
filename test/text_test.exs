@@ -717,35 +717,38 @@ defmodule RfwFormats.TextTest do
   test "parseLibraryFile: complex nested structures" do
     result =
       Text.parse_library_file("""
-      widget ComplexWidget = Column(
-        children: [
-          Text(text: "Header"),
-          ...for item in data.items:
-            Row(
-              children: [
-                Text(text: item.name),
-                switch item.type {
-                  "button": Button(
-                    onPressed: event "buttonPressed" { id: item.id },
-                    child: Text(text: "Press me")
-                  ),
-                  "checkbox": Checkbox(
-                    value: state.values[item.id],
-                    onChanged: set state.values = item.id
-                  ),
-                  default: Text(text: "Unknown type")
-                }
-              ]
-            ),
-          Builder(
-            builder: (context) => Text(text: context.itemCount)
-          )
-        ]
-      );
+      import widgets;
+      import material;
+
+      widget complexWidget = Column(
+          children: [
+            Text(text: ["Header"]),
+            ...for item in data.items:
+              Row(
+                children: [
+                  Text(text: [item.name]),
+                  switch item.type {
+                    "button": Button(
+                      onPressed: event "buttonPressed" { id: item.id },
+                      child: Text(text: ["Press me"])
+                    ),
+                    "checkbox": Checkbox(
+                      value: state.value,
+                      onChanged: set state.values = item.id
+                    ),
+                    default: Text(text: ["Unknown type"])
+                  }
+                ]
+              ),
+            Builder(
+              builder: (context) => Text(text: [context.itemCount])
+            )
+          ]
+        );
       """)
 
     widget = hd(result.widgets)
-    assert widget.name == "ComplexWidget"
+    assert widget.name == "complexWidget"
 
     assert %Model.ConstructorCall{name: "Column", arguments: %{"children" => children}} =
              widget.root
