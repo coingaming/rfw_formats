@@ -580,55 +580,18 @@ defmodule RfwFormats.Text do
 
   constructor_argument =
     identifier
-    |> pre_traverse(:track_argument_name)
     |> ignore(string(":"))
     |> ignore(whitespace)
     |> parsec(:value)
-    |> post_traverse(:wrap_argument_value)
     |> wrap()
     |> ignore(whitespace)
-    |> reduce({List, :flatten, []})
-
-  # Add these helper functions:
-  defp track_argument_name(rest, [name], context, _line, _offset) do
-    updated_context = Map.put(context, :current_argument, name)
-    {rest, [name], updated_context}
-  end
-
-  defp wrap_argument_value(rest, [value, name], context, _line, _offset) do
-    arg_name = Map.get(context, :current_argument)
-
-    wrapped_value =
-      cond do
-        arg_name in ["children", "actions", "items"] and not is_list(value) ->
-          [value]
-
-        true ->
-          value
-      end
-
-    {rest, [wrapped_value, name], context}
-  end
-
-  # Add fallback clause for other patterns
-  defp wrap_argument_value(rest, values, context, _line, _offset) do
-    {rest, values, context}
-  end
 
   defp assemble_constructor_call_args([name | args]) when is_list(args) do
     [name | List.flatten(args)]
   end
 
-  valid_library_start =
-    choice([
-      string("import"),
-      string("widget"),
-      empty() |> eos()
-    ])
-
   library =
     ignore(whitespace)
-    |> lookahead(valid_library_start)
     |> repeat(import_statement |> ignore(whitespace))
     |> repeat(widget_declaration |> ignore(whitespace))
     |> ignore(whitespace)
