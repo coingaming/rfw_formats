@@ -482,9 +482,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("=>"))
     |> ignore(whitespace)
-    |> debug()
     |> parsec(:value)
-    |> debug()
     |> post_traverse({:validate_widget_builder_value, []})
     |> post_traverse({:pop_widget_arg, []})
     |> ignore(whitespace)
@@ -492,7 +490,6 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> wrap()
     |> map({:create_widget_builder, []})
-    |> debug()
 
   defp validate_widget_builder_value(rest, [value | _] = args, context, {line, _}, _offset) do
     case value do
@@ -552,14 +549,12 @@ defmodule RfwFormats.Text do
 
   constructor_argument =
     identifier
-    |> debug()
     |> ignore(string(":"))
     |> ignore(whitespace)
     |> parsec(:value)
     |> wrap()
     |> ignore(whitespace)
     |> reduce({List, :flatten, []})
-    |> debug()
 
   defp assemble_constructor_call_args([name | args]) when is_list(args) do
     [name | List.flatten(args)]
