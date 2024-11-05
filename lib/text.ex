@@ -176,35 +176,24 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> wrap(
       optional(
-        choice([
-          # Reference existing loop combinator
-          parsec(:loop) |> map({:wrap_loop_in_list, []}),
-          parsec(:value)
-        ])
-        |> debug()
+        parsec(:value)
         |> repeat(
           ignore(whitespace)
           |> ignore(string(","))
           |> ignore(whitespace)
-          |> choice([
-            # Reference existing loop combinator
-            parsec(:loop) |> map({:wrap_loop_in_list, []}),
-            parsec(:value)
-          ])
+          |> parsec(:value)
         )
-        |> optional(ignore(string(",")))
       )
     )
-    |> debug()
     |> ignore(whitespace)
     |> ignore(string("]"))
-    |> map({:process_list_values, []})
-    |> debug()
+    |> map({:wrap_list_values, []})
 
-  defp wrap_loop_in_list(loop), do: [loop]
+  defp wrap_list_values(values) when is_list(values) do
+    values
+  end
 
-  defp process_list_values(nil), do: []
-  defp process_list_values(values) when is_list(values), do: values
+  defp wrap_list_values(value), do: [value]
 
   map =
     ignore(string("{"))
@@ -212,12 +201,10 @@ defmodule RfwFormats.Text do
     |> wrap(
       optional(
         choice([string_literal, identifier])
-        |> debug()
         |> ignore(whitespace)
         |> ignore(string(":"))
         |> ignore(whitespace)
         |> parsec(:value)
-        |> debug()
         |> repeat(
           ignore(whitespace)
           |> ignore(string(","))
@@ -234,19 +221,21 @@ defmodule RfwFormats.Text do
     |> ignore(string("}"))
     |> map({:create_map, []})
 
-  defp wrap_map_value(_key, value) when is_list(value), do: value
-  defp wrap_map_value(_key, %Model.Loop{} = loop), do: [loop]
-  defp wrap_map_value(_key, v), do: v
-
   defp create_map([]), do: %{}
 
   defp create_map(pairs) do
     Enum.chunk_every(pairs, 2)
     |> Enum.reduce(%{}, fn
       [_k, :__null__], acc -> acc
-      [k, v], acc -> Map.put(acc, k, wrap_map_value(k, v))
+      [k, v], acc -> Map.put(acc, k, wrap_value(k, v))
     end)
   end
+
+  # Helper to wrap certain values in lists when needed
+  defp wrap_value(key, %Model.WidgetBuilderArgReference{} = v) when key == "c", do: [v]
+  defp wrap_value(_key, value) when is_list(value), do: value
+  defp wrap_value(_key, %Model.Loop{} = v), do: [v]
+  defp wrap_value(_key, v), do: v
 
   loop_var =
     identifier
@@ -280,47 +269,56 @@ defmodule RfwFormats.Text do
 
   loop =
     ignore(string("...for"))
-    |> pre_traverse(:push_loop_context)
     |> ignore(whitespace)
-    |> unwrap_and_tag(identifier, :loop_var)
-    |> debug()
+    |> tag(identifier, :loop_var)
+    |> post_traverse({:push_loop_var, []})
     |> ignore(whitespace)
     |> ignore(string("in"))
     |> ignore(whitespace)
-    |> unwrap_and_tag(parsec(:value), :input)
-    |> debug()
+    |> tag(parsec(:value), :input)
     |> ignore(string(":"))
     |> ignore(whitespace)
-    |> unwrap_and_tag(parsec(:value), :output)
-    |> debug()
-    |> post_traverse(:create_loop_with_context)
-    |> debug()
-    |> post_traverse(:pop_loop_context)
-    |> debug()
+    |> tag(parsec(:value), :output)
+    |> post_traverse({:pop_loop_var, []})
+    |> wrap()
+    |> map({:create_loop, []})
 
-  defp push_loop_context(rest, args, context, _line, _offset) do
-    {rest, args, Map.put(context, :in_loop, true)}
-  end
-
-  defp pop_loop_context(rest, args, context, _line, _offset) do
-    {rest, args, Map.delete(context, :in_loop)}
-  end
-
-  defp create_loop_with_context(rest, args, context, _line, _offset) do
-    loop = Model.new_loop(Keyword.get(args, :input), Keyword.get(args, :output))
-
+  defp push_loop_var(rest, [loop_var: var], context, _line, _offset) do
     result =
-      case Map.get(context, :in_loop) do
-        true -> [loop]
-        _ -> loop
+      {rest, [loop_var: var],
+       Map.update(context, :loop_vars, [List.first(var)], &[List.first(var) | &1])}
+
+    result
+  end
+
+  defp pop_loop_var(rest, args, context, _line, _offset) do
+    {rest, args, Map.update(context, :loop_vars, [], &tl(&1))}
+  end
+
+  defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, [output]}]) do
+    # Flatten the input and output if necessary
+    processed_input =
+      case input do
+        [inner] -> inner
+        _ -> input
       end
 
-    {rest, [result], context}
+    processed_output =
+      case output do
+        [single] ->
+          single
+
+        _ ->
+          output
+      end
+
+    result = Model.new_loop(processed_input, processed_output)
+
+    result
   end
 
   switch =
     ignore(string("switch"))
-    |> pre_traverse(:push_switch_context)
     |> ignore(whitespace)
     |> unwrap_and_tag(parsec(:value), :input)
     |> ignore(whitespace)
@@ -329,14 +327,14 @@ defmodule RfwFormats.Text do
     |> tag(
       times(
         choice([
-          ignore(string("default")) |> replace(nil),
+          ignore(string("default"))
+          |> replace(nil),
           parsec(:value)
         ])
         |> ignore(whitespace)
         |> ignore(string(":"))
         |> ignore(whitespace)
         |> parsec(:value)
-        |> post_traverse(:validate_case_value)
         |> wrap()
         |> ignore(whitespace)
         |> optional(ignore(string(",")))
@@ -345,43 +343,10 @@ defmodule RfwFormats.Text do
       ),
       :cases
     )
-    |> post_traverse(:pop_switch_context)
     |> ignore(whitespace)
     |> ignore(string("}"))
     |> wrap()
     |> map({:create_switch, []})
-
-  defp push_switch_context(rest, args, context, _line, _offset) do
-    updated_context = Map.put(context, :in_switch, true)
-    {rest, args, updated_context}
-  end
-
-  defp pop_switch_context(rest, args, context, _line, _offset) do
-    updated_context = Map.delete(context, :in_switch)
-    {rest, args, updated_context}
-  end
-
-  defp validate_case_value(rest, [value, case_key], context, line, _offset) do
-    case {Map.get(context, :in_widget_builder, false), value} do
-      # In widget builder context, enforce widget rules
-      {true, %Model.ConstructorCall{}} ->
-        {rest, [value, case_key], context}
-
-      {true, %Model.Switch{}} ->
-        {rest, [value, case_key], context}
-
-      {true, %Model.WidgetBuilderDeclaration{}} ->
-        {rest, [value, case_key], context}
-
-      {true, other} ->
-        raise __MODULE__.ParserException,
-              {"Invalid widget builder value: #{inspect(other)}", rest, line}
-
-      # Outside widget builder context, allow any value
-      {false, _} ->
-        {rest, [value, case_key], context}
-    end
-  end
 
   defp create_switch(input: input, cases: cases) do
     Model.new_switch(input, create_map(List.flatten(cases)))
@@ -427,33 +392,8 @@ defmodule RfwFormats.Text do
     |> wrap()
     |> map({:create_event_handler, []})
 
-  defp create_event_handler([event_name, event_arguments]) when is_binary(event_name) do
-    validated_args = validate_event_arguments(event_arguments)
-    Model.new_event_handler(event_name, validated_args)
-  end
-
-  defp validate_event_arguments(%{} = args) do
-    Enum.reduce(args, %{}, fn
-      {key, value}, acc when is_binary(key) ->
-        Map.put(acc, key, validate_event_argument_value(value))
-
-      {key, _}, _acc ->
-        raise __MODULE__.ParserException,
-              {"Event argument key must be a string: #{inspect(key)}", "", 0}
-    end)
-  end
-
-  defp validate_event_argument_value(value) when is_number(value), do: value
-  defp validate_event_argument_value(value) when is_binary(value), do: value
-  defp validate_event_argument_value(value) when is_boolean(value), do: value
-  defp validate_event_argument_value(%Model.ArgsReference{} = ref), do: ref
-  defp validate_event_argument_value(%Model.DataReference{} = ref), do: ref
-  defp validate_event_argument_value(%Model.StateReference{} = ref), do: ref
-  defp validate_event_argument_value(%Model.LoopReference{} = ref), do: ref
-  defp validate_event_argument_value(%Model.WidgetBuilderArgReference{} = ref), do: ref
-
-  defp validate_event_argument_value(invalid) do
-    raise __MODULE__.ParserException, {"Invalid event argument value: #{inspect(invalid)}", "", 0}
+  defp create_event_handler([event_name, event_arguments]) do
+    Model.new_event_handler(event_name, event_arguments)
   end
 
   set_state_handler =
@@ -537,14 +477,12 @@ defmodule RfwFormats.Text do
     ignore(string("("))
     |> ignore(whitespace)
     |> concat(identifier)
-    |> debug()
     |> post_traverse({:push_widget_arg, []})
     |> ignore(string(")"))
     |> ignore(whitespace)
     |> ignore(string("=>"))
     |> ignore(whitespace)
     |> parsec(:value)
-    |> debug()
     |> post_traverse({:validate_widget_builder_value, []})
     |> post_traverse({:pop_widget_arg, []})
     |> ignore(whitespace)
@@ -587,7 +525,6 @@ defmodule RfwFormats.Text do
 
   constructor_call =
     identifier
-    |> debug()
     |> ignore(string("("))
     |> ignore(whitespace)
     |> optional(
@@ -598,7 +535,6 @@ defmodule RfwFormats.Text do
         |> ignore(whitespace)
         |> parsec(:constructor_argument)
       )
-      |> debug()
       |> ignore(whitespace)
     )
     |> reduce({:assemble_constructor_call_args, []})
@@ -607,12 +543,7 @@ defmodule RfwFormats.Text do
     |> map({:create_constructor_call, []})
 
   defp create_constructor_call([name | args]) do
-    arguments =
-      args
-      |> Enum.chunk_every(2)
-      |> Enum.map(fn [k, v] -> {k, v} end)
-      |> Enum.into(%{})
-
+    arguments = create_map(args)
     Model.new_constructor_call(name, arguments)
   end
 
@@ -623,13 +554,22 @@ defmodule RfwFormats.Text do
     |> parsec(:value)
     |> wrap()
     |> ignore(whitespace)
+    |> reduce({List, :flatten, []})
 
   defp assemble_constructor_call_args([name | args]) when is_list(args) do
     [name | List.flatten(args)]
   end
 
+  valid_library_start =
+    choice([
+      string("import"),
+      string("widget"),
+      empty() |> eos()
+    ])
+
   library =
     ignore(whitespace)
+    |> lookahead(valid_library_start)
     |> repeat(import_statement |> ignore(whitespace))
     |> repeat(widget_declaration |> ignore(whitespace))
     |> ignore(whitespace)
