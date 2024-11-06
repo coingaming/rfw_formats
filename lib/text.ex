@@ -243,7 +243,6 @@ defmodule RfwFormats.Text do
 
   # Helper to wrap certain values in lists when needed
   defp wrap_value(key, %Model.WidgetBuilderArgReference{} = v) when key == "c", do: [v]
-  defp wrap_value(_key, value) when is_list(value), do: value
   defp wrap_value(_key, %Model.Loop{} = v), do: [v]
   defp wrap_value(_key, v), do: v
 
@@ -326,6 +325,37 @@ defmodule RfwFormats.Text do
     result
   end
 
+  defp validate_switch_cases_traverse(
+         rest,
+         [{:cases, cases}, {:input, input}],
+         context,
+         {line, _col},
+         _offset
+       ) do
+    # Convert cases list to map, handling the list structure correctly
+    case_map = Enum.into(cases, %{}, fn [key, value] -> {key, value} end)
+
+    default_cases = Enum.filter(case_map, fn {k, _v} -> k == nil end)
+
+    if length(default_cases) > 1 do
+      raise __MODULE__.ParserException, {"Switch has multiple default cases", rest, line}
+    end
+
+    non_default_cases = Map.delete(case_map, nil)
+
+    _duplicate_keys =
+      Enum.reduce(non_default_cases, MapSet.new(), fn {k, _v}, acc ->
+        if MapSet.member?(acc, k) do
+          raise __MODULE__.ParserException,
+                {"Switch has duplicate cases for key #{inspect(k)}", rest, line}
+        end
+
+        MapSet.put(acc, k)
+      end)
+
+    {rest, [{:cases, cases}, {:input, input}], context}
+  end
+
   switch =
     ignore(string("switch"))
     |> ignore(whitespace)
@@ -352,6 +382,7 @@ defmodule RfwFormats.Text do
       ),
       :cases
     )
+    |> post_traverse({:validate_switch_cases_traverse, []})
     |> ignore(whitespace)
     |> ignore(string("}"))
     |> wrap()
