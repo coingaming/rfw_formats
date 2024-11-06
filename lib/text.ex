@@ -7,6 +7,16 @@ defmodule RfwFormats.Text do
 
   alias RfwFormats.Model
 
+  @reserved_words ~w(args data event false set state true)
+
+  defp check_reserved_word(identifier, {line, _} = _location, rest) do
+    if identifier in @reserved_words do
+      # We're only using line here
+      error_msg = transform_error("#{identifier} is a reserved word", rest, {line, 0})
+      raise __MODULE__.ParserException, {error_msg, rest, line}
+    end
+  end
+
   # Line Comment: // comment until end of line
   line_comment =
     ignore(string("//"))
@@ -246,18 +256,17 @@ defmodule RfwFormats.Text do
     )
     |> post_traverse({:check_loop_var, []})
 
-  defp check_loop_var(rest, parsed, context, _line, _offset) do
+  defp check_loop_var(rest, parsed, context, {_line, _} = location, _offset) do
     var_name = Keyword.get(parsed, :var_name)
+    check_reserved_word(var_name, location, rest)
     raw_parts = Keyword.get(parsed, :parts, [])
     parts = if is_list(raw_parts), do: raw_parts, else: [raw_parts]
 
     cond do
-      # Check loop variables first
       index = Enum.find_index(Map.get(context, :loop_vars, []), &(&1 == var_name)) ->
         loop_ref = Model.new_loop_reference(index, parts)
         {rest, [loop_ref], context}
 
-      # Then check widget builder arguments
       var_name in Map.get(context, :widget_args, []) ->
         builder_ref = Model.new_widget_builder_arg_reference(var_name, parts)
         {rest, [builder_ref], context}
@@ -506,12 +515,8 @@ defmodule RfwFormats.Text do
     end
   end
 
-  defp push_widget_arg(rest, [arg_name], context, {line, _col}, _offset) do
-    if arg_name in ["args", "data", "event", "false", "set", "state", "true"] do
-      error_msg = transform_error("#{arg_name} is a reserved word", rest, {line, 0})
-      raise __MODULE__.ParserException, {error_msg, rest, line}
-    end
-
+  defp push_widget_arg(rest, [arg_name], context, location, _offset) do
+    check_reserved_word(arg_name, location, rest)
     {rest, [arg_name], Map.update(context, :widget_args, [arg_name], &[arg_name | &1])}
   end
 
