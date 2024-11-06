@@ -722,21 +722,21 @@ defmodule RfwFormats.TextTest do
 
       widget complexWidget = Column(
           children: [
-            Text(text: ["Header"]),
+            Text(text: "Header"),
             ...for item in data.items:
               Row(
                 children: [
-                  Text(text: [item.name]),
+                  Text(text: ["Item: ", item.name]),
                   switch item.type {
                     "button": Button(
                       onPressed: event "buttonPressed" { id: item.id },
-                      child: Text(text: ["Press me"])
+                      child: Text(text: "Press me")
                     ),
                     "checkbox": Checkbox(
                       value: state.value,
                       onChanged: set state.values = item.id
                     ),
-                    default: Text(text: ["Unknown type"])
+                    default: Text(text: "Unknown type")
                   }
                 ]
               ),
@@ -769,14 +769,37 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.ConstructorCall{
              name: "Text",
-             arguments: %{"text" => %Model.LoopReference{loop: 0, parts: ["name"]}}
+             arguments: %{"text" => ["Item: ", %Model.LoopReference{loop: 0, parts: ["name"]}]}
            } = name_text
 
     assert %Model.Switch{
              input: %Model.LoopReference{loop: 0, parts: ["type"]},
              outputs: %{
-               "button" => %Model.ConstructorCall{name: "Button"},
-               "checkbox" => %Model.ConstructorCall{name: "Checkbox"},
+               "button" => %Model.ConstructorCall{
+                 name: "Button",
+                 arguments: %{
+                   "onPressed" => %Model.EventHandler{
+                     event_name: "buttonPressed",
+                     event_arguments: %{
+                       "id" => %Model.LoopReference{loop: 0, parts: ["id"]}
+                     }
+                   },
+                   "child" => %Model.ConstructorCall{
+                     name: "Text",
+                     arguments: %{"text" => "Press me"}
+                   }
+                 }
+               },
+               "checkbox" => %Model.ConstructorCall{
+                 name: "Checkbox",
+                 arguments: %{
+                   "value" => %Model.StateReference{parts: ["value"]},
+                   "onChanged" => %Model.SetStateHandler{
+                     state_reference: %Model.StateReference{parts: ["values"]},
+                     value: %Model.LoopReference{loop: 0, parts: ["id"]}
+                   }
+                 }
+               },
                nil => %Model.ConstructorCall{
                  name: "Text",
                  arguments: %{"text" => "Unknown type"}
@@ -791,7 +814,14 @@ defmodule RfwFormats.TextTest do
              argument_name: "context",
              widget: %Model.ConstructorCall{
                name: "Text",
-               arguments: %{"text" => "Total items: ${context.itemCount}"}
+               arguments: %{
+                 "text" => [
+                   %Model.WidgetBuilderArgReference{
+                     argument_name: "context",
+                     parts: ["itemCount"]
+                   }
+                 ]
+               }
              }
            } = builder_decl
   end

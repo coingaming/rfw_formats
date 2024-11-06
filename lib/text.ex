@@ -198,11 +198,8 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("]"))
     |> map({:wrap_list_values, []})
-    |> debug()
 
   defp wrap_list_values(value) do
-    IO.inspect(value, label: "wrap_list_values input")
-
     result =
       case value do
         nil -> []
@@ -210,7 +207,6 @@ defmodule RfwFormats.Text do
         other -> [other]
       end
 
-    IO.inspect(result, label: "wrap_list_values output")
     result
   end
 
@@ -243,28 +239,21 @@ defmodule RfwFormats.Text do
   defp create_map([]), do: %{}
 
   defp create_map(pairs) do
-    IO.inspect(pairs, label: "create_map input pairs")
     chunked = Enum.chunk_every(pairs, 2)
-    IO.inspect(chunked, label: "after chunk_every")
 
     Enum.reduce(chunked, %{}, fn pair, acc ->
-      IO.inspect(pair, label: "reduce pair")
-
       case pair do
         [_k, :__null__] ->
           acc
 
         [k, v] ->
           wrapped = wrap_value(k, v)
-          IO.inspect({k, v, wrapped}, label: "k, v, wrapped result")
           Map.put(acc, k, wrapped)
       end
     end)
   end
 
-  defp wrap_value(key, v) do
-    IO.inspect({key, v}, label: "wrap_value input")
-
+  defp wrap_value(_key, v) do
     cond do
       match?(%Model.Loop{}, v) -> [v]
       is_list(v) -> v
