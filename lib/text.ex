@@ -198,12 +198,21 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("]"))
     |> map({:wrap_list_values, []})
+    |> debug()
 
-  defp wrap_list_values(values) when is_list(values) do
-    values
+  defp wrap_list_values(value) do
+    IO.inspect(value, label: "wrap_list_values input")
+
+    result =
+      case value do
+        nil -> []
+        values when is_list(values) -> values
+        other -> [other]
+      end
+
+    IO.inspect(result, label: "wrap_list_values output")
+    result
   end
-
-  defp wrap_list_values(value), do: [value]
 
   map =
     ignore(string("{"))
@@ -234,17 +243,34 @@ defmodule RfwFormats.Text do
   defp create_map([]), do: %{}
 
   defp create_map(pairs) do
-    Enum.chunk_every(pairs, 2)
-    |> Enum.reduce(%{}, fn
-      [_k, :__null__], acc -> acc
-      [k, v], acc -> Map.put(acc, k, wrap_value(k, v))
+    IO.inspect(pairs, label: "create_map input pairs")
+    chunked = Enum.chunk_every(pairs, 2)
+    IO.inspect(chunked, label: "after chunk_every")
+
+    Enum.reduce(chunked, %{}, fn pair, acc ->
+      IO.inspect(pair, label: "reduce pair")
+
+      case pair do
+        [_k, :__null__] ->
+          acc
+
+        [k, v] ->
+          wrapped = wrap_value(k, v)
+          IO.inspect({k, v, wrapped}, label: "k, v, wrapped result")
+          Map.put(acc, k, wrapped)
+      end
     end)
   end
 
-  # Helper to wrap certain values in lists when needed
-  defp wrap_value(key, %Model.WidgetBuilderArgReference{} = v) when key == "c", do: [v]
-  defp wrap_value(_key, %Model.Loop{} = v), do: [v]
-  defp wrap_value(_key, v), do: v
+  defp wrap_value(key, v) do
+    IO.inspect({key, v}, label: "wrap_value input")
+
+    cond do
+      match?(%Model.Loop{}, v) -> [v]
+      is_list(v) -> v
+      true -> v
+    end
+  end
 
   loop_var =
     identifier
@@ -590,10 +616,15 @@ defmodule RfwFormats.Text do
     |> parsec(:value)
     |> wrap()
     |> ignore(whitespace)
-    |> reduce({List, :flatten, []})
 
-  defp assemble_constructor_call_args([name | args]) when is_list(args) do
-    [name | List.flatten(args)]
+  defp assemble_constructor_call_args([name | args]) do
+    args =
+      Enum.flat_map(args, fn
+        [key, value] -> [key, value]
+        other -> other
+      end)
+
+    [name | args]
   end
 
   valid_library_start =
