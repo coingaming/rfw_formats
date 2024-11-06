@@ -134,7 +134,6 @@ defmodule RfwFormats.Text do
     |> ignore(ascii_char([?']))
     |> reduce({:erlang, :list_to_binary, []})
 
-  # Combined String Literal Combinator
   string_literal =
     choice([
       double_string_literal,
@@ -347,7 +346,6 @@ defmodule RfwFormats.Text do
          {line, _col},
          _offset
        ) do
-    # Convert cases list to map, handling the list structure correctly
     case_map = Enum.into(cases, %{}, fn [key, value] -> {key, value} end)
 
     default_cases = Enum.filter(case_map, fn {k, _v} -> k == nil end)
@@ -702,7 +700,6 @@ defmodule RfwFormats.Text do
     def message(%{message: message}), do: message
   end
 
-  # Error handling utilities
   defp format_found_token(<<>>) do
     "<EOF>"
   end
