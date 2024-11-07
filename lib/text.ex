@@ -174,7 +174,6 @@ defmodule RfwFormats.Text do
       parsec(:constructor_call),
       parsec(:loop_var)
     ])
-    |> label("value")
 
   list =
     ignore(string("["))
@@ -254,10 +253,6 @@ defmodule RfwFormats.Text do
           acc
 
         [k, v] ->
-          if Map.has_key?(acc, k) do
-            raise __MODULE__.Error, {"duplicate key '#{k}' in map", "", 1}
-          end
-
           Map.put(acc, k, v)
       end
     end)
@@ -310,12 +305,9 @@ defmodule RfwFormats.Text do
     |> map({:create_loop, []})
     |> label("loop")
 
-  defp push_loop_var(rest, [loop_var: var], context, _line, _offset) do
-    result =
-      {rest, [loop_var: var],
-       Map.update(context, :loop_vars, [List.first(var)], &[List.first(var) | &1])}
-
-    result
+  defp push_loop_var(rest, [loop_var: [var_name]], context, location, _offset) do
+    check_reserved_word(var_name, location, rest)
+    {rest, [loop_var: [var_name]], Map.update(context, :loop_vars, [var_name], &[var_name | &1])}
   end
 
   defp pop_loop_var(rest, args, context, _line, _offset) do
@@ -348,25 +340,22 @@ defmodule RfwFormats.Text do
          {line, _col},
          _offset
        ) do
-    case_map = Enum.into(cases, %{}, fn [key, value] -> {key, value} end)
+    Enum.reduce(cases, {false, MapSet.new()}, fn [key, _value], {has_default, keys} ->
+      cond do
+        key == nil and has_default ->
+          raise __MODULE__.Error, {"Switch has multiple default cases", rest, line}
 
-    default_cases = Enum.filter(case_map, fn {k, _v} -> k == nil end)
+        key == nil ->
+          {true, keys}
 
-    if length(default_cases) > 1 do
-      raise __MODULE__.Error, {"Switch has multiple default cases", rest, line}
-    end
-
-    non_default_cases = Map.delete(case_map, nil)
-
-    _duplicate_keys =
-      Enum.reduce(non_default_cases, MapSet.new(), fn {k, _v}, acc ->
-        if MapSet.member?(acc, k) do
+        MapSet.member?(keys, key) ->
           raise __MODULE__.Error,
-                {"Switch has duplicate cases for key '#{inspect(k)}'", rest, line}
-        end
+                {"Switch has duplicate cases for key #{inspect(key)}", rest, line}
 
-        MapSet.put(acc, k)
-      end)
+        true ->
+          {has_default, MapSet.put(keys, key)}
+      end
+    end)
 
     {rest, [{:cases, cases}, {:input, input}], context}
   end
@@ -478,6 +467,7 @@ defmodule RfwFormats.Text do
     |> wrap(
       times(
         choice([identifier, string_literal])
+        |> label("string or identifier")
         |> ignore(optional(string("."))),
         min: 1
       )
@@ -640,8 +630,6 @@ defmodule RfwFormats.Text do
     |> repeat(widget_declaration |> ignore(whitespace))
     |> ignore(whitespace)
     |> post_traverse({:build_library, []})
-    |> eos()
-    |> label("library")
 
   defp build_library(rest, parts, context, _line, _offset) do
     parts = Enum.reverse(parts)
@@ -685,7 +673,6 @@ defmodule RfwFormats.Text do
     ignore(whitespace)
     |> concat(map)
     |> ignore(whitespace)
-    |> eos()
   )
 
   defp parse_unicode_escape(hex) do
