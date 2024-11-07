@@ -11,7 +11,7 @@ defmodule RfwFormats.Text do
 
   defp check_reserved_word(identifier, {line, _} = _location, rest) do
     if identifier in @reserved_words do
-      raise __MODULE__.ParserException, {"#{identifier} is a reserved word", rest, line}
+      raise __MODULE__.Error, {"#{identifier} is a reserved word", rest, line}
     end
   end
 
@@ -255,7 +255,7 @@ defmodule RfwFormats.Text do
 
         [k, v] ->
           if Map.has_key?(acc, k) do
-            raise __MODULE__.ParserException, {"duplicate key '#{k}' in map", "", 1}
+            raise __MODULE__.Error, {"duplicate key '#{k}' in map", "", 1}
           end
 
           Map.put(acc, k, v)
@@ -353,7 +353,7 @@ defmodule RfwFormats.Text do
     default_cases = Enum.filter(case_map, fn {k, _v} -> k == nil end)
 
     if length(default_cases) > 1 do
-      raise __MODULE__.ParserException, {"Switch has multiple default cases", rest, line}
+      raise __MODULE__.Error, {"Switch has multiple default cases", rest, line}
     end
 
     non_default_cases = Map.delete(case_map, nil)
@@ -361,7 +361,7 @@ defmodule RfwFormats.Text do
     _duplicate_keys =
       Enum.reduce(non_default_cases, MapSet.new(), fn {k, _v}, acc ->
         if MapSet.member?(acc, k) do
-          raise __MODULE__.ParserException,
+          raise __MODULE__.Error,
                 {"Switch has duplicate cases for key '#{inspect(k)}'", rest, line}
         end
 
@@ -565,9 +565,11 @@ defmodule RfwFormats.Text do
         {rest, args, context}
 
       _ ->
-        raise __MODULE__.ParserException,
-              {"Expecting a switch or constructor call got #{inspect(value)} at line #{line}.",
-               rest, line}
+        raise __MODULE__.Error, {
+          "Expecting a switch or constructor call got #{inspect(value)}",
+          rest,
+          line
+        }
     end
   end
 
@@ -705,30 +707,26 @@ defmodule RfwFormats.Text do
     end
   end
 
-  defmodule ParserException do
+  defmodule Error do
     defexception [:message, :rest, :line]
 
     @impl true
+    def message(%{message: message}), do: message
+
     def exception({message, rest, line}) do
       %__MODULE__{
-        message: message,
+        message: "#{message} at line #{line}.",
         rest: rest,
         line: line
       }
     end
 
-    @impl true
-    def message(%{message: message}), do: message
-  end
-
-  defmodule Error do
-    defexception [:message]
-
-    @impl true
-    def message(%{message: message}), do: message
-
-    def exception({message, _rest, _context, {line, _}, _}) do
-      %__MODULE__{message: "#{message} at line #{line}."}
+    def exception({message, rest, _context, {line, _}, _}) do
+      %__MODULE__{
+        message: "#{message} at line #{line}.",
+        rest: rest,
+        line: line
+      }
     end
   end
 
@@ -737,17 +735,11 @@ defmodule RfwFormats.Text do
   end
 
   defp handle_parse_result({:error, message, rest, context, location, offset}, _) do
-    # For semantic errors, use ParserException
-    if String.contains?(message, ["reserved word", "duplicate cases", "multiple default cases"]) do
-      raise ParserException, {message, rest, elem(location, 0)}
-    else
-      # For syntax errors, use Error
-      raise Error, {message, rest, context, location, offset}
-    end
+    raise Error, {message, rest, context, location, offset}
   end
 
   defp handle_parse_result(_, _) do
-    raise ParserException, {"Unexpected parser result", "", 0}
+    raise Error, {"Unexpected parser result", "", %{}, {1, 0}, 0}
   end
 
   @doc """
