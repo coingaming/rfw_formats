@@ -257,18 +257,9 @@ defmodule RfwFormats.Text do
           acc
 
         [k, v] ->
-          wrapped = wrap_value(k, v)
-          Map.put(acc, k, wrapped)
+          Map.put(acc, k, v)
       end
     end)
-  end
-
-  defp wrap_value(_key, v) do
-    cond do
-      match?(%Model.Loop{}, v) -> [v]
-      is_list(v) -> v
-      true -> v
-    end
   end
 
   loop_var =
@@ -328,25 +319,22 @@ defmodule RfwFormats.Text do
     {rest, args, Map.update(context, :loop_vars, [], &tl(&1))}
   end
 
-  defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, [output]}]) do
-    # Flatten the input and output if necessary
+  defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, output}]) do
+    # Flatten the input if necessary
     processed_input =
       case input do
         [inner] -> inner
         _ -> input
       end
 
+    # Flatten the output if necessary
     processed_output =
       case output do
-        [single] ->
-          single
-
-        _ ->
-          output
+        [inner] -> inner
+        _ -> output
       end
 
     result = Model.new_loop(processed_input, processed_output)
-
     result
   end
 
@@ -639,7 +627,8 @@ defmodule RfwFormats.Text do
     |> eos()
 
   defp build_library(rest, parts, context, _line, _offset) do
-    # Filter out any nil or non-import/widget elements
+    parts = Enum.reverse(parts)
+
     parts =
       Enum.filter(parts, fn
         %Model.Import{} -> true
