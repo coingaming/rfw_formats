@@ -715,7 +715,7 @@ defmodule RfwFormats.Text do
 
     def exception({message, rest, line}) do
       %__MODULE__{
-        message: "#{message} at line #{line}.",
+        message: "#{message} at line #{line}",
         rest: rest,
         line: line
       }
@@ -723,7 +723,7 @@ defmodule RfwFormats.Text do
 
     def exception({message, rest, _context, {line, _}, _}) do
       %__MODULE__{
-        message: "#{message} at line #{line}.",
+        message: "#{message} at line #{line}",
         rest: rest,
         line: line
       }

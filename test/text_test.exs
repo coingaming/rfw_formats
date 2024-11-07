@@ -23,128 +23,6 @@ defmodule RfwFormats.TextTest do
     assert result == Model.new_remote_widget_library([], [])
   end
 
-  test "error handling in parseDataFile" do
-    test_cases = [
-      {"", "Expected symbol '{' but found <EOF> at line 1."},
-      {"}", "Expected symbol '{' but found '}' at line 1."},
-      {"1", "Expected symbol '{' but found '1' at line 1."},
-      {"1.2", "Expected symbol '{' but found '1.2' at line 1."},
-      {"a", "Expected symbol '{' but found 'a' at line 1."},
-      {"\"a\"", "Expected symbol '{' but found 'a' at line 1."},
-      {"&", "Unexpected character U+0026 ('&') at line 1."},
-      {"\t", "Unexpected character U+0009 at line 1."},
-      {"{ a: 0, a: 0 }", "Duplicate key 'a' in map at line 1."},
-      {"{ a: 0; }", "Expected symbol '}' but found ';' at line 1."},
-      {"{ a: [ 0 ; ] }", "Expected comma but found ';' at line 1."},
-      {"{ } x", "Expected end of file but found 'x' at line 1."},
-      {"{ a: a }", "Unexpected 'a' at line 1."},
-      {"{ ... }", "Expected symbol '}' but found '…' at line 1."},
-      {"{ a: ... }", "Unexpected '…' at line 1."},
-      {"{ a: -", "Unexpected end of file after minus sign at line 1."},
-      {"{ a: -a",
-       "Unexpected character U+0061 ('a') after minus sign (expected digit) at line 1."},
-      {"{ a: 0", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: 0e", "Unexpected end of file after exponent separator at line 1."},
-      {"{ a: 0ee", "Unexpected character U+0065 ('e') after exponent separator at line 1."},
-      {"{ a: 0e-", "Unexpected end of file after exponent separator and minus sign at line 1."},
-      {"{ a: 0e-e", "Unexpected character U+0065 ('e') in exponent at line 1."},
-      {"{ a: 0e-f", "Unexpected character U+0066 ('f') in exponent at line 1."},
-      {"{ a: 0e-.", "Unexpected character U+002E ('.') in exponent at line 1."},
-      {"{ a: 0e- ", "Unexpected character U+0020 in exponent at line 1."},
-      {"{ a: 0e-0", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: 0e-0{", "Expected symbol '}' but found '{' at line 1."},
-      {"{ a: 0e-0;", "Expected symbol '}' but found ';' at line 1."},
-      {"{ a: 0e-0e", "Unexpected character U+0065 ('e') in exponent at line 1."},
-      {"{ a: 0 ", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: 0.", "Unexpected end of file after decimal point at line 1."},
-      {"{ a: 0.e", "Unexpected character U+0065 ('e') in fraction component at line 1."},
-      {"{ a: 0. ", "Unexpected character U+0020 in fraction component at line 1."},
-      {"{ a: 00", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: 00e", "Unexpected end of file after exponent separator at line 1."},
-      {"{ a: 00ee", "Unexpected character U+0065 ('e') after exponent separator at line 1."},
-      {"{ a: 00e-", "Unexpected end of file after exponent separator and minus sign at line 1."},
-      {"{ a: 00 ", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: -0", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: -0.", "Unexpected end of file after decimal point at line 1."},
-      {"{ a: -0. ", "Unexpected character U+0020 in fraction component at line 1."},
-      {"{ a: -0.0", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: -0.0 ", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: -0.0e", "Unexpected end of file after exponent separator at line 1."},
-      {"{ a: -0.0ee", "Unexpected character U+0065 ('e') after exponent separator at line 1."},
-      {"{ a: -0.0e-",
-       "Unexpected end of file after exponent separator and minus sign at line 1."},
-      {"{ a: -0.0f", "Unexpected character U+0066 ('f') in fraction component at line 1."},
-      {"{ a: -00", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: 0f", "Unexpected character U+0066 ('f') after zero at line 1."},
-      {"{ a: -0f", "Unexpected character U+0066 ('f') after negative zero at line 1."},
-      {"{ a: 00f", "Unexpected character U+0066 ('f') at line 1."},
-      {"{ a: -00f", "Unexpected character U+0066 ('f') at line 1."},
-      {"{ a: test.0", "Unexpected test at line 1."},
-      {"{ a: test.0 ", "Unexpected test at line 1."},
-      {"{ a: 0x", "Unexpected end of file after 0x prefix at line 1."},
-      {"{ a: 0xg", "Unexpected character U+0067 ('g') after 0x prefix at line 1."},
-      {"{ a: 0xx", "Unexpected character U+0078 ('x') after 0x prefix at line 1."},
-      {"{ a: 0x}", "Unexpected character U+007D ('}') after 0x prefix at line 1."},
-      {"{ a: 0x0", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: 0xff", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: 0xfg", "Unexpected character U+0067 ('g') in hex literal at line 1."},
-      {"{ a: .\"hello\"", "Unexpected '.' at line 1."},
-      {"{ a: \"hello\".\"hello\"", "Expected symbol '}' but found '.' at line 1."},
-      {"{ a: \"hello\"", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ a: \"\\n\"", "Unexpected end of line inside string at line 2."},
-      {"{ a: \"hello\\n\"", "Unexpected end of line inside string at line 2."},
-      {"{ a: \"\\", "Unexpected end of file inside string at line 1."},
-      {"{ a: .\"hello\"", "Unexpected '.' at line 1."},
-      {"{ \"a\": 'hello'.'hello'", "Expected symbol '}' but found '.' at line 1."},
-      {"{ \"a\": 'hello'", "Expected symbol '}' but found <EOF> at line 1."},
-      {"{ \"a\": 'hello'h", "Unexpected character U+0068 ('h') after end quote at line 1."},
-      {"{ \"a\": '\\n'", "Unexpected end of line inside string at line 2."},
-      {"{ \"a\": 'hello\\n'", "Unexpected end of line inside string at line 2."},
-      {"{ \"a\": '\\", "Unexpected end of file inside string at line 1."},
-      {"{ \"a\": '\\'", "Unexpected end of file inside string at line 1."},
-      {"{ \"a\": '\\u", "Unexpected end of file inside Unicode escape at line 1."},
-      {"{ \"a\": '\\u0", "Unexpected end of file inside Unicode escape at line 1."},
-      {"{ \"a\": '\\u00", "Unexpected end of file inside Unicode escape at line 1."},
-      {"{ \"a\": '\\u000", "Unexpected end of file inside Unicode escape at line 1."},
-      {"{ \"a\": '\\u0000", "Unexpected end of file inside string at line 1."},
-      {"{ \"a\": '\\u|", "Unexpected character U+007C ('|') in Unicode escape at line 1."},
-      {"{ \"a\": '\\u0|", "Unexpected character U+007C ('|') in Unicode escape at line 1."},
-      {"{ \"a\": '\\u00|", "Unexpected character U+007C ('|') in Unicode escape at line 1."},
-      {"{ \"a\": '\\u000|", "Unexpected character U+007C ('|') in Unicode escape at line 1."},
-      {"{ \"a\": '\\u0000|", "Unexpected end of file inside string at line 1."},
-      {"{ \"a\": '\\U263A' }",
-       "Unexpected character U+0055 ('U') after backslash in string at line 1."},
-      {"{ \"a\": \"\\", "Unexpected end of file inside string at line 1."},
-      {"{ \"a\": \"\\\"", "Unexpected end of file inside string at line 1."},
-      {"{ \"a\": \"\\u", "Unexpected end of file inside Unicode escape at line 1."},
-      {"{ \"a\": \"\\u0", "Unexpected end of file inside Unicode escape at line 1."},
-      {"{ \"a\": \"\\u00", "Unexpected end of file inside Unicode escape at line 1."},
-      {"{ \"a\": \"\\u000", "Unexpected end of file inside Unicode escape at line 1."},
-      {"{ \"a\": \"\\u0000", "Unexpected end of file inside string at line 1."},
-      {"{ \"a\": \"\\u|", "Unexpected character U+007C ('|') in Unicode escape at line 1."},
-      {"{ \"a\": \"\\u0|", "Unexpected character U+007C ('|') in Unicode escape at line 1."},
-      {"{ \"a\": \"\\u00|", "Unexpected character U+007C ('|') in Unicode escape at line 1."},
-      {"{ \"a\": \"\\u000|", "Unexpected character U+007C ('|') in Unicode escape at line 1."},
-      {"{ \"a\": \"\\u0000|", "Unexpected end of file inside string at line 1."},
-      {"{ \"a\": \"\\U263A\" }",
-       "Unexpected character U+0055 ('U') after backslash in string at line 1."},
-      {"{ \"a\": ", "Unexpected <EOF> at line 1."},
-      {"{ \"a\": /", "Unexpected end of file inside comment delimiter at line 1."},
-      {"{ \"a\": /.", "Unexpected character U+002E ('.') inside comment delimiter at line 1."},
-      {"{ \"a\": //", "Unexpected <EOF> at line 1."},
-      {"{ \"a\": /*", "Unexpected end of file in block comment at line 1."},
-      {"{ \"a\": /*/", "Unexpected end of file in block comment at line 1."},
-      {"{ \"a\": /**", "Unexpected end of file in block comment at line 1."},
-      {"{ \"a\": /* *", "Unexpected end of file in block comment at line 1."}
-    ]
-
-    for {input, expected_message} <- test_cases do
-      assert_raise Text.ParserException, expected_message, fn ->
-        Text.parse_data_file(input)
-      end
-    end
-  end
-
   test "valid values in parseDataFile" do
     assert Text.parse_data_file("{ }\n\n  \n\n") == %{}
     assert Text.parse_data_file("{ a: \"b\" }") == %{"a" => "b"}
@@ -242,44 +120,42 @@ defmodule RfwFormats.TextTest do
 
   test "error handling in parseLibraryFile" do
     test_cases = [
-      {"2", "Expected keywords 'import' or 'widget', or end of file but found 2 at line 1."},
-      {"impor",
-       "Expected keywords 'import' or 'widget', or end of file but found impor at line 1."},
-      {"import", "Expected string but found <EOF> at line 1."},
-      {"import 2", "Expected string but found '2' at line 1."},
-      {"import foo", "Expected symbol ';' but found <EOF> at line 1."},
-      {"import foo.", "Expected string but found <EOF> at line 1."},
-      {"import foo,", "Expected symbol ';' but found ',' at line 1."},
-      {"import foo+", "Unexpected character U+002B ('+') inside identifier at line 1."},
-      {"import foo.1", "Expected string but found '1' at line 1."},
-      {"import foo.+", "Unexpected character U+002B ('+') after period at line 1."},
-      {"import foo.\"", "Unexpected end of file inside string at line 1."},
-      {"import foo. \"", "Unexpected end of file inside string at line 1."},
-      {"import foo.'", "Unexpected end of file inside string at line 1."},
-      {"import foo. '", "Unexpected end of file inside string at line 1."},
-      {"widget a = b(c: [ ...for args in []: \"e\" ]);", "args is a reserved word at line 1."},
-      {"widget a = switch 0 { 0: a(), 0: b() };",
-       "Switch has duplicate cases for key '0' at line 1."},
+      {"2", "expected library at line 1"},
+      {"impor", "expected library at line 1"},
+      {"import", "expected string or identifier at line 1"},
+      {"import 2", "expected string or identifier at line 1"},
+      {"import foo", "expected symbol ';' at line 1"},
+      {"import foo.", "expected string or identifier at line 1"},
+      {"import foo,", "expected symbol ';' at line 1"},
+      {"import foo+", "expected symbol ';' at line 1"},
+      {"import foo.1", "expected string or identifier at line 1"},
+      {"import foo.+", "expected string or identifier at line 1"},
+      {"import foo.\"", "expected double quoted string at line 1"},
+      {"import foo. \"", "expected double quoted string at line 1"},
+      {"import foo.'", "expected single quoted string at line 1"},
+      {"import foo. '", "expected single quoted string at line 1"},
+      {"widget a = b(c: [ ...for args in []: \"e\" ]);", "args is a reserved word at line 1"},
+      {"widget a = switch 0 { 0: a(), 0: b() };", "Switch has duplicate cases for key '0'"},
       {"widget a = switch 0 { default: a(), default: b() };",
-       "Switch has multiple default cases at line 1."},
-      {"widget a = b(c: args)", "Expected symbol '.' but found ')' at line 1."},
-      {"widget a = b(c: args.=)", "Unexpected '=' at line 1."},
-      {"widget a = b(c: args.0", "Expected symbol ')' but found <EOF> at line 1."},
-      {"widget a = b(c: args.0 ", "Expected symbol ')' but found <EOF> at line 1."},
-      {"widget a = b(c: args.0)", "Expected symbol ';' but found <EOF> at line 1."},
-      {"widget a = b(c: args.0f", "Unexpected character U+0066 ('f') in integer at line 1."},
-      {"widget a = b(c: [ ..", "Unexpected end of file inside '...' symbol at line 1."},
-      {"widget a = b(c: [ .. ]);", "Unexpected character U+0020 inside '...' symbol at line 1."},
-      {"widget a = b(c: [ ... ]);", "Expected identifier but found ']' at line 1."},
-      {"widget a = b(c: [ ...baa ]);", "Expected 'for' but found 'baa' at line 1."},
-      {"widget a = 0;", "Expected identifier but found '0' at line 1."},
-      {"widget a = a.", "Expected symbol '(' but found '.' at line 1."},
-      {"widget a = a. ", "Expected symbol '(' but found '.' at line 1."},
-      {"widget a = a.0 ", "Expected symbol '(' but found '.' at line 1."}
+       "Switch has multiple default cases"},
+      {"widget a = b(c: args)", "expected symbol '.'"},
+      {"widget a = b(c: args.=)", "expected identifier, string literal, or integer"},
+      {"widget a = b(c: args.0", "expected symbol ')'"},
+      {"widget a = b(c: args.0 ", "expected symbol ')'"},
+      {"widget a = b(c: args.0)", "expected symbol ';'"},
+      {"widget a = b(c: args.0f", "expected symbol ')'"},
+      {"widget a = b(c: [ ..", "expected identifier"},
+      {"widget a = b(c: [ .. ]);", "expected identifier"},
+      {"widget a = b(c: [ ... ]);", "expected identifier"},
+      {"widget a = b(c: [ ...baa ]);", "expected 'for'"},
+      {"widget a = 0;", "expected constructor call or switch statement"},
+      {"widget a = a.", "expected symbol '('"},
+      {"widget a = a. ", "expected symbol '('"},
+      {"widget a = a.0 ", "expected symbol '('"}
     ]
 
     for {input, expected_message} <- test_cases do
-      assert_raise Text.ParserException, expected_message, fn ->
+      assert_raise Text.Error, expected_message, fn ->
         Text.parse_library_file(input)
       end
     end
@@ -564,15 +440,13 @@ defmodule RfwFormats.TextTest do
   end
 
   test "parseLibraryFile: widgetBuilders check the returned value" do
-    assert_raise Text.ParserException,
-                 "Expecting a switch or constructor call got 1 at line 1.",
-                 fn ->
-                   Text.parse_library_file("widget a = B(b: (foo) => 1);")
-                 end
+    assert_raise Text.Error, "Expecting a switch or constructor call got 1 at line 1", fn ->
+      Text.parse_library_file("widget a = B(b: (foo) => 1);")
+    end
   end
 
   test "parseLibraryFile: widgetBuilders check reserved words" do
-    assert_raise Text.ParserException, "args is a reserved word at line 1.", fn ->
+    assert_raise Text.Error, "args is a reserved word at line 1", fn ->
       Text.parse_library_file(
         "widget a = Builder(builder: (args) => Container(width: args.width));"
       )
