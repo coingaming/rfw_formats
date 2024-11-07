@@ -192,6 +192,11 @@ defmodule RfwFormats.Text do
           |> ignore(whitespace)
           |> parsec(:value)
         )
+        |> optional(
+          ignore(whitespace)
+          |> ignore(string(","))
+          |> ignore(whitespace)
+        )
       )
     )
     |> ignore(whitespace)
@@ -228,6 +233,12 @@ defmodule RfwFormats.Text do
           |> ignore(string(":"))
           |> ignore(whitespace)
           |> parsec(:value)
+        )
+        # Allow optional trailing comma
+        |> optional(
+          ignore(whitespace)
+          |> ignore(string(","))
+          |> ignore(whitespace)
         )
       )
     )
@@ -584,7 +595,12 @@ defmodule RfwFormats.Text do
         |> ignore(whitespace)
         |> parsec(:constructor_argument)
       )
-      |> ignore(whitespace)
+      # Allow optional trailing comma
+      |> optional(
+        ignore(whitespace)
+        |> ignore(string(","))
+        |> ignore(whitespace)
+      )
     )
     |> reduce({:assemble_constructor_call_args, []})
     |> ignore(whitespace)
