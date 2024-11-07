@@ -11,9 +11,7 @@ defmodule RfwFormats.Text do
 
   defp check_reserved_word(identifier, {line, _} = _location, rest) do
     if identifier in @reserved_words do
-      # We're only using line here
-      error_msg = transform_error("#{identifier} is a reserved word", rest, {line, 0})
-      raise __MODULE__.ParserException, {error_msg, rest, line}
+      raise __MODULE__.ParserException, {"#{identifier} is a reserved word", rest, line}
     end
   end
 
@@ -22,12 +20,14 @@ defmodule RfwFormats.Text do
     ignore(string("//"))
     |> repeat(lookahead_not(ascii_char([?\n])) |> utf8_char([]))
     |> optional(ascii_char([?\n]))
+    |> label("line comment")
 
   # Block Comment: /* comment */
   block_comment =
     ignore(string("/*"))
     |> repeat(lookahead_not(string("*/")) |> utf8_char([]))
     |> ignore(string("*/"))
+    |> label("block comment")
 
   # Basic whitespace characters
   whitespace_char = ascii_char([?\s, ?\n, ?\r, ?\t])
@@ -47,13 +47,15 @@ defmodule RfwFormats.Text do
     |> concat(
       choice([
         string("0x")
-        |> ascii_string([?0..?9, ?a..?f, ?A..?F], min: 1),
+        |> ascii_string([?0..?9, ?a..?f, ?A..?F], min: 1)
+        |> label("hexadecimal number"),
         ascii_string([?0..?9], min: 1)
         |> lookahead_not(ascii_char([?., ?e, ?E]))
       ])
     )
     |> reduce({List, :to_string, []})
     |> map({:parse_integer, []})
+    |> label("integer")
 
   defp parse_integer("0x" <> hex), do: String.to_integer(hex, 16)
   defp parse_integer(str), do: String.to_integer(str)
@@ -62,12 +64,12 @@ defmodule RfwFormats.Text do
     ascii_char([?a..?z, ?A..?Z, ?_])
     |> repeat(ascii_char([?a..?z, ?A..?Z, ?0..?9, ?_]))
     |> reduce({List, :to_string, []})
+    |> label("identifier")
 
   float =
     optional(ascii_char([?-]))
     |> ascii_string([?0..?9], min: 1)
     |> choice([
-      # Decimal point and fractional part, with optional exponent
       string(".")
       |> ascii_string([?0..?9], min: 1)
       |> optional(
@@ -75,64 +77,56 @@ defmodule RfwFormats.Text do
         |> optional(ascii_char([?+, ?-]))
         |> ascii_string([?0..?9], min: 1)
       ),
-      # Exponent without decimal point
       choice([string("e"), string("E")])
       |> optional(ascii_char([?+, ?-]))
       |> ascii_string([?0..?9], min: 1)
     ])
     |> reduce({List, :to_string, []})
     |> map({:parse_float, []})
+    |> label("float")
 
   defp parse_float(str) do
     {float, ""} = Float.parse(str)
     float
   end
 
+  string_escape_sequence =
+    choice([
+      ignore(string("\\u"))
+      |> utf8_string([?0..?9, ?a..?f, ?A..?F], 4)
+      |> map({:parse_unicode_escape, []}),
+      string("\\\"") |> replace(?"),
+      string("\\\\") |> replace(?\\),
+      string("\\/") |> replace(?/),
+      string("\\'") |> replace(?'),
+      string("\\b") |> replace(?\b),
+      string("\\f") |> replace(?\f),
+      string("\\n") |> replace(?\n),
+      string("\\r") |> replace(?\r),
+      string("\\t") |> replace(?\t),
+      utf8_char([])
+    ])
+    |> label("escape sequence")
+
   double_string_literal =
     ignore(ascii_char([?"]))
     |> repeat(
       lookahead_not(ascii_char([?"]))
-      |> choice([
-        ignore(string("\\u"))
-        |> utf8_string([?0..?9, ?a..?f, ?A..?F], 4)
-        |> map({:parse_unicode_escape, []}),
-        string("\\\"") |> replace(?"),
-        string("\\\\") |> replace(?\\),
-        string("\\/") |> replace(?/),
-        string("\\'") |> replace(?'),
-        string("\\b") |> replace(?\b),
-        string("\\f") |> replace(?\f),
-        string("\\n") |> replace(?\n),
-        string("\\r") |> replace(?\r),
-        string("\\t") |> replace(?\t),
-        utf8_char([])
-      ])
+      |> parsec(:string_escape_sequence)
     )
     |> ignore(ascii_char([?"]))
     |> reduce({:erlang, :list_to_binary, []})
+    |> label("double quoted string")
 
   single_string_literal =
     ignore(ascii_char([?']))
     |> repeat(
       lookahead_not(ascii_char([?']))
-      |> choice([
-        ignore(string("\\u"))
-        |> utf8_string([?0..?9, ?a..?f, ?A..?F], 4)
-        |> map({:parse_unicode_escape, []}),
-        string("\\\"") |> replace(?"),
-        string("\\\\") |> replace(?\\),
-        string("\\/") |> replace(?/),
-        string("\\'") |> replace(?'),
-        string("\\b") |> replace(?\b),
-        string("\\f") |> replace(?\f),
-        string("\\n") |> replace(?\n),
-        string("\\r") |> replace(?\r),
-        string("\\t") |> replace(?\t),
-        utf8_char([])
-      ])
+      |> parsec(:string_escape_sequence)
     )
     |> ignore(ascii_char([?']))
     |> reduce({:erlang, :list_to_binary, []})
+    |> label("single quoted string")
 
   string_literal =
     choice([
@@ -140,11 +134,11 @@ defmodule RfwFormats.Text do
       single_string_literal
     ])
 
-  true_literal = string("true") |> replace(true)
-  false_literal = string("false") |> replace(false)
-  null_literal = string("null") |> replace(:__null__)
+  true_literal = string("true") |> replace(true) |> label("true")
+  false_literal = string("false") |> replace(false) |> label("false")
+  null_literal = string("null") |> replace(:__null__) |> label("null")
 
-  boolean = choice([true_literal, false_literal])
+  boolean = choice([true_literal, false_literal]) |> label("boolean")
 
   defp string_to_integer(str), do: String.to_integer(str)
 
@@ -158,6 +152,7 @@ defmodule RfwFormats.Text do
       ]),
       min: 1
     )
+    |> label("dot separated parts")
 
   value =
     choice([
@@ -179,6 +174,7 @@ defmodule RfwFormats.Text do
       parsec(:constructor_call),
       parsec(:loop_var)
     ])
+    |> label("value")
 
   list =
     ignore(string("["))
@@ -202,6 +198,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("]"))
     |> map({:wrap_list_values, []})
+    |> label("list")
 
   defp wrap_list_values(value) do
     result =
@@ -234,7 +231,6 @@ defmodule RfwFormats.Text do
           |> ignore(whitespace)
           |> parsec(:value)
         )
-        # Allow optional trailing comma
         |> optional(
           ignore(whitespace)
           |> ignore(string(","))
@@ -245,6 +241,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("}"))
     |> map({:create_map, []})
+    |> label("map")
 
   defp create_map([]), do: %{}
 
@@ -257,6 +254,10 @@ defmodule RfwFormats.Text do
           acc
 
         [k, v] ->
+          if Map.has_key?(acc, k) do
+            raise __MODULE__.ParserException, {"duplicate key '#{k}' in map", "", 1}
+          end
+
           Map.put(acc, k, v)
       end
     end)
@@ -270,6 +271,7 @@ defmodule RfwFormats.Text do
       |> unwrap_and_tag(:parts)
     )
     |> post_traverse({:check_loop_var, []})
+    |> label("loop variable")
 
   defp check_loop_var(rest, parsed, context, {_line, _} = location, _offset) do
     var_name = Keyword.get(parsed, :var_name)
@@ -306,6 +308,7 @@ defmodule RfwFormats.Text do
     |> post_traverse({:pop_loop_var, []})
     |> wrap()
     |> map({:create_loop, []})
+    |> label("loop")
 
   defp push_loop_var(rest, [loop_var: var], context, _line, _offset) do
     result =
@@ -359,7 +362,7 @@ defmodule RfwFormats.Text do
       Enum.reduce(non_default_cases, MapSet.new(), fn {k, _v}, acc ->
         if MapSet.member?(acc, k) do
           raise __MODULE__.ParserException,
-                {"Switch has duplicate cases for key #{inspect(k)}", rest, line}
+                {"Switch has duplicate cases for key '#{inspect(k)}'", rest, line}
         end
 
         MapSet.put(acc, k)
@@ -399,6 +402,7 @@ defmodule RfwFormats.Text do
     |> ignore(string("}"))
     |> wrap()
     |> map({:create_switch, []})
+    |> label("switch statement")
 
   defp create_switch(input: input, cases: cases) do
     Model.new_switch(input, create_map(List.flatten(cases)))
@@ -410,6 +414,7 @@ defmodule RfwFormats.Text do
     |> concat(dot_separated_parts)
     |> wrap()
     |> map({:create_args_reference, []})
+    |> label("args reference")
 
   defp create_args_reference([_ | parts]) do
     Model.new_args_reference(List.flatten(parts))
@@ -420,6 +425,7 @@ defmodule RfwFormats.Text do
     |> concat(dot_separated_parts)
     |> wrap()
     |> map({:create_data_reference, []})
+    |> label("data reference")
 
   defp create_data_reference([_ | parts]) do
     Model.new_data_reference(List.flatten(parts))
@@ -430,6 +436,7 @@ defmodule RfwFormats.Text do
     |> concat(dot_separated_parts)
     |> wrap()
     |> map({:create_state_reference, []})
+    |> label("state reference")
 
   defp create_state_reference([_ | parts]) do
     Model.new_state_reference(List.flatten(parts))
@@ -443,6 +450,7 @@ defmodule RfwFormats.Text do
     |> concat(map)
     |> wrap()
     |> map({:create_event_handler, []})
+    |> label("event handler")
 
   defp create_event_handler([event_name, event_arguments]) do
     Model.new_event_handler(event_name, event_arguments)
@@ -458,6 +466,7 @@ defmodule RfwFormats.Text do
     |> parsec(:value)
     |> wrap()
     |> map({:create_set_state_handler, []})
+    |> label("set state handler")
 
   defp create_set_state_handler([state_reference, value]) do
     Model.new_set_state_handler(state_reference, value)
@@ -475,6 +484,7 @@ defmodule RfwFormats.Text do
     )
     |> ignore(string(";"))
     |> map({:create_import, []})
+    |> label("import statement")
 
   defp create_import(parts) do
     parts = Enum.filter(parts, &(&1 != nil))
@@ -487,6 +497,7 @@ defmodule RfwFormats.Text do
       parsec(:constructor_call),
       parsec(:switch)
     ])
+    |> label("constructor call or switch statement")
 
   widget_declaration =
     ignore(string("widget"))
@@ -506,6 +517,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string(";"))
     |> ignore(whitespace)
+    |> label("widget declaration")
 
   defp create_widget_declaration([name, initial_state, root]) do
     Model.new_widget_declaration(name, initial_state, root)
@@ -542,6 +554,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> wrap()
     |> map({:create_widget_builder, []})
+    |> label("widget builder")
 
   defp validate_widget_builder_value(rest, [value | _] = args, context, {line, _}, _offset) do
     case value do
@@ -583,7 +596,6 @@ defmodule RfwFormats.Text do
         |> ignore(whitespace)
         |> parsec(:constructor_argument)
       )
-      # Allow optional trailing comma
       |> optional(
         ignore(whitespace)
         |> ignore(string(","))
@@ -594,6 +606,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string(")"))
     |> map({:create_constructor_call, []})
+    |> label("constructor call")
 
   defp create_constructor_call([name | args]) do
     arguments = create_map(args)
@@ -607,6 +620,7 @@ defmodule RfwFormats.Text do
     |> parsec(:value)
     |> wrap()
     |> ignore(whitespace)
+    |> label("constructor argument")
 
   defp assemble_constructor_call_args([name | args]) do
     args =
@@ -625,6 +639,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> post_traverse({:build_library, []})
     |> eos()
+    |> label("library")
 
   defp build_library(rest, parts, context, _line, _offset) do
     parts = Enum.reverse(parts)
@@ -647,6 +662,7 @@ defmodule RfwFormats.Text do
   end
 
   defcombinatorp(:value, value)
+  defcombinatorp(:string_escape_sequence, string_escape_sequence)
   defcombinatorp(:list, list)
   defcombinatorp(:map, map)
   defcombinatorp(:loop, loop)
@@ -671,18 +687,19 @@ defmodule RfwFormats.Text do
   )
 
   defp parse_unicode_escape(hex) do
-    code_point = String.to_integer(hex, 16)
+    # Convert hex string to integer, handling both uppercase and lowercase
+    code_point =
+      hex
+      |> String.downcase()
+      |> String.to_integer(16)
 
     cond do
-      # Code points up to U+D7FF are valid Unicode scalar values and can be encoded as UTF-8
       code_point <= 0xD7FF ->
         <<code_point::utf8>>
 
-      # Code points from U+D800 to U+FFFF should be output as 16-bit code units
       code_point <= 0xFFFF ->
         <<code_point::16>>
 
-      # Code points above U+FFFF are invalid in this context
       true ->
         raise "Invalid code point in Unicode escape sequence: #{hex}"
     end
@@ -704,108 +721,33 @@ defmodule RfwFormats.Text do
     def message(%{message: message}), do: message
   end
 
-  defp format_found_token(<<>>) do
-    "<EOF>"
-  end
+  defmodule Error do
+    defexception [:message]
 
-  defp format_found_token(rest) do
-    case String.split(rest, "\n") do
-      [first | _] -> String.slice(first, 0, 10)
-      [] -> ""
+    @impl true
+    def message(%{message: message}), do: message
+
+    def exception({message, _rest, _context, {line, _}, _}) do
+      %__MODULE__{message: "#{message} at line #{line}."}
     end
   end
 
-  defp extract_context(message) do
-    cond do
-      String.contains?(message, "after") ->
-        "after " <> (String.split(message, "after ") |> List.last())
+  defp handle_parse_result({:ok, [result], "", _, _, _}, _) do
+    result
+  end
 
-      String.contains?(message, "inside") ->
-        "inside " <> (String.split(message, "inside ") |> List.last())
-
-      String.contains?(message, "in") ->
-        "in " <> (String.split(message, "in ") |> List.last())
-
-      true ->
-        ""
+  defp handle_parse_result({:error, message, rest, context, location, offset}, _) do
+    # For semantic errors, use ParserException
+    if String.contains?(message, ["reserved word", "duplicate cases", "multiple default cases"]) do
+      raise ParserException, {message, rest, elem(location, 0)}
+    else
+      # For syntax errors, use Error
+      raise Error, {message, rest, context, location, offset}
     end
   end
 
-  defp format_unexpected_char_error(rest) do
-    <<char::utf8, _::binary>> = rest
-    code = Integer.to_string(char, 16) |> String.upcase() |> String.pad_leading(4, "0")
-    {code, <<char::utf8>>}
-  end
-
-  defp extract_expected(message) do
-    String.replace(message, "expected ", "")
-  end
-
-  # Main error transformation
-  @semantic_errors [
-    "args is a reserved word",
-    "Switch has duplicate cases for key 0",
-    "Switch has multiple default cases"
-  ]
-
-  defp transform_error(message, rest, {line, _col}) when is_binary(message) do
-    found_token = format_found_token(rest)
-
-    base_message =
-      cond do
-        # Keyword errors (import/widget)
-        String.contains?(message, "string \"import\" or string \"widget\"") ->
-          "Expected keywords \"import\" or \"widget\", or end of file but found #{found_token}"
-
-        # Expected vs found pattern
-        String.contains?(message, "expected") ->
-          "Expected #{extract_expected(message)} but found #{found_token}"
-
-        # Unexpected character with context
-        String.starts_with?(message, "unexpected character") ->
-          {code, char} = format_unexpected_char_error(rest)
-          context = extract_context(message)
-          "Unexpected character U+#{code} (\"#{char}\") #{context}"
-
-        # End of file errors
-        String.contains?(message, "end of file") ->
-          context =
-            case String.split(message, "end of file") do
-              [_, ctx] -> String.trim(ctx)
-              _ -> ""
-            end
-
-          "Unexpected end of file #{context}"
-
-        # Semantic errors
-        message in @semantic_errors ->
-          "#{message}"
-
-        # Default case
-        true ->
-          "#{message}"
-      end
-
-    "#{base_message} at line #{line}."
-  end
-
-  # Unified parse result handler
-  defp handle_parse_result(parse_result, parser_type) do
-    case parse_result do
-      {:ok, [result], "", _, {_, _}, _} ->
-        result
-
-      {:ok, _results, rest, _context, {line, _}, _} when parser_type == :library ->
-        error_msg = transform_error("expected end of file", rest, {line, 0})
-        raise ParserException, {error_msg, rest, line}
-
-      {:error, reason, rest, _, {line, _}, _} ->
-        error_msg = transform_error(reason, rest, {line, 0})
-        raise ParserException, {error_msg, rest, line}
-
-      _ ->
-        raise ParserException, {"Unexpected parser result", "", 0}
-    end
+  defp handle_parse_result(_, _) do
+    raise ParserException, {"Unexpected parser result", "", 0}
   end
 
   @doc """
