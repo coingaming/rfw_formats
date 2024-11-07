@@ -825,4 +825,90 @@ defmodule RfwFormats.TextTest do
              }
            } = builder_decl
   end
+
+  test "parseLibraryFile: loops and concatenation in text" do
+    result =
+      Text.parse_library_file("""
+      import core;
+
+      widget root = test(
+        list: ['A'],
+        loop: [...for b in ['B', 'C']: b]
+      );
+
+      widget test = Text(
+        textDirection: 'ltr',
+        text: [
+          '>',
+          ...for a in args.list: a,
+          ...for b in args.loop: b,
+          '<',
+        ],
+      );
+      """)
+
+    widgets = result.widgets
+    assert length(widgets) == 2
+    [root_widget, test_widget] = widgets
+
+    # Check root widget
+    assert root_widget.name == "root"
+    assert %Model.ConstructorCall{name: "test", arguments: root_args} = root_widget.root
+    assert root_args["list"] == ["A"]
+
+    assert [
+             %Model.Loop{
+               input: ["B", "C"],
+               output: %Model.LoopReference{loop: 0}
+             }
+           ] = root_args["loop"]
+
+    # Check test widget
+    assert test_widget.name == "test"
+    assert %Model.ConstructorCall{name: "Text", arguments: text_args} = test_widget.root
+    assert text_args["textDirection"] == "ltr"
+
+    assert [
+             ">",
+             %Model.Loop{
+               input: %Model.ArgsReference{parts: ["list"]},
+               output: %Model.LoopReference{loop: 0}
+             },
+             %Model.Loop{
+               input: %Model.ArgsReference{parts: ["loop"]},
+               output: %Model.LoopReference{loop: 0}
+             },
+             "<"
+           ] = text_args["text"]
+
+    # Simulate the evaluation to verify the concatenated text
+
+    # Prepare the args for 'test' widget
+    test_args = %{
+      "list" => ["A"],
+      "loop" => ["B", "C"]
+    }
+
+    # Simulate loops in 'test' widget's text
+    text_elements =
+      Enum.flat_map(text_args["text"], fn
+        %Model.Loop{
+          input: %Model.ArgsReference{parts: ["list"]},
+          output: %Model.LoopReference{loop: 0}
+        } ->
+          test_args["list"]
+
+        %Model.Loop{
+          input: %Model.ArgsReference{parts: ["loop"]},
+          output: %Model.LoopReference{loop: 0}
+        } ->
+          test_args["loop"]
+
+        other ->
+          [other]
+      end)
+
+    concatenated_text = Enum.join(text_elements)
+    assert concatenated_text == ">ABC<"
+  end
 end
