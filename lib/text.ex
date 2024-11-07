@@ -630,16 +630,8 @@ defmodule RfwFormats.Text do
     [name | args]
   end
 
-  valid_library_start =
-    choice([
-      string("import"),
-      string("widget"),
-      empty() |> eos()
-    ])
-
   library =
     ignore(whitespace)
-    |> lookahead(valid_library_start)
     |> repeat(import_statement |> ignore(whitespace))
     |> repeat(widget_declaration |> ignore(whitespace))
     |> ignore(whitespace)
@@ -647,13 +639,20 @@ defmodule RfwFormats.Text do
     |> eos()
 
   defp build_library(rest, parts, context, _line, _offset) do
-    {imports, rest_parts} =
-      Enum.split_while(parts, fn
+    # Filter out any nil or non-import/widget elements
+    parts =
+      Enum.filter(parts, fn
+        %Model.Import{} -> true
+        %Model.WidgetDeclaration{} -> true
+        _ -> false
+      end)
+
+    {imports, widgets} =
+      Enum.split_with(parts, fn
         %Model.Import{} -> true
         _ -> false
       end)
 
-    widgets = rest_parts
     result = Model.new_remote_widget_library(imports, widgets)
     {rest, [result], context}
   end
