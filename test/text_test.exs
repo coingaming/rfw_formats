@@ -851,7 +851,6 @@ defmodule RfwFormats.TextTest do
     assert length(widgets) == 2
     [root_widget, test_widget] = widgets
 
-    # Check root widget
     assert root_widget.name == "root"
     assert %Model.ConstructorCall{name: "test", arguments: root_args} = root_widget.root
     assert root_args["list"] == ["A"]
@@ -863,7 +862,6 @@ defmodule RfwFormats.TextTest do
              }
            ] = root_args["loop"]
 
-    # Check test widget
     assert test_widget.name == "test"
     assert %Model.ConstructorCall{name: "Text", arguments: text_args} = test_widget.root
     assert text_args["textDirection"] == "ltr"
@@ -881,15 +879,11 @@ defmodule RfwFormats.TextTest do
              "<"
            ] = text_args["text"]
 
-    # Simulate the evaluation to verify the concatenated text
-
-    # Prepare the args for 'test' widget
     test_args = %{
       "list" => ["A"],
       "loop" => ["B", "C"]
     }
 
-    # Simulate loops in 'test' widget's text
     text_elements =
       Enum.flat_map(text_args["text"], fn
         %Model.Loop{
@@ -910,5 +904,164 @@ defmodule RfwFormats.TextTest do
 
     concatenated_text = Enum.join(text_elements)
     assert concatenated_text == ">ABC<"
+  end
+
+  test "parseLibraryFile: nested builders and references" do
+    template = """
+      import core;
+      import local;
+
+      widget test = Sum(
+        operand1: 1,
+        operand2: 2,
+        builder: (result1) => IntToString(
+          value: result1.result,
+          builder: (result2) => Text(
+            text: ['1 + 2 = ', result2.result],
+            textDirection: 'ltr'
+          ),
+        ),
+      );
+    """
+
+    result = Text.parse_library_file(template)
+    widget = hd(result.widgets)
+    assert widget.name == "test"
+
+    assert %Model.ConstructorCall{
+             name: "Sum",
+             arguments: %{
+               "operand1" => 1,
+               "operand2" => 2,
+               "builder" => sum_builder
+             }
+           } = widget.root
+
+    assert %Model.WidgetBuilderDeclaration{
+             argument_name: "result1",
+             widget: int_to_string_call
+           } = sum_builder
+
+    assert %Model.ConstructorCall{
+             name: "IntToString",
+             arguments: %{
+               "value" => %Model.WidgetBuilderArgReference{
+                 argument_name: "result1",
+                 parts: ["result"]
+               },
+               "builder" => int_to_string_builder
+             }
+           } = int_to_string_call
+
+    assert %Model.WidgetBuilderDeclaration{
+             argument_name: "result2",
+             widget: text_call
+           } = int_to_string_builder
+
+    assert %Model.ConstructorCall{
+             name: "Text",
+             arguments: %{
+               "text" => [
+                 "1 + 2 = ",
+                 %Model.WidgetBuilderArgReference{
+                   argument_name: "result2",
+                   parts: ["result"]
+                 }
+               ],
+               "textDirection" => "ltr"
+             }
+           } = text_call
+  end
+
+  test "parseLibraryFile: widgets with state, loops, and references" do
+    template = """
+      import core;
+      widget verify { state: 0x00 } = GestureDetector(
+        onTap: set state.state = args.value.a.b,
+        child: ColoredBox(color: switch state.state {
+          0x00: 0xFF000001,
+          0xEE: 0xFF000002,
+        }),
+      );
+      widget remote = SizedBox(child: args.corn.0);
+      widget root = remote(
+        corn: [
+          ...for v in data.list:
+            verify(value: v),
+        ],
+      );
+    """
+
+    result = Text.parse_library_file(template)
+    widgets = result.widgets
+    assert length(widgets) == 3
+
+    verify_widget = Enum.find(widgets, fn widget -> widget.name == "verify" end)
+    remote_widget = Enum.find(widgets, fn widget -> widget.name == "remote" end)
+    root_widget = Enum.find(widgets, fn widget -> widget.name == "root" end)
+
+    assert verify_widget != nil
+    assert verify_widget.initial_state == %{"state" => 0x00}
+
+    assert %Model.ConstructorCall{
+             name: "GestureDetector",
+             arguments: %{
+               "onTap" => on_tap,
+               "child" => child
+             }
+           } = verify_widget.root
+
+    assert %Model.SetStateHandler{
+             state_reference: %Model.StateReference{parts: ["state"]},
+             value: %Model.ArgsReference{parts: ["value", "a", "b"]}
+           } = on_tap
+
+    assert %Model.ConstructorCall{
+             name: "ColoredBox",
+             arguments: %{
+               "color" => color_switch
+             }
+           } = child
+
+    assert %Model.Switch{
+             input: %Model.StateReference{parts: ["state"]},
+             outputs: %{
+               0x00 => 0xFF000001,
+               0xEE => 0xFF000002
+             }
+           } = color_switch
+
+    assert remote_widget != nil
+
+    assert %Model.ConstructorCall{
+             name: "SizedBox",
+             arguments: %{
+               "child" => child_arg
+             }
+           } = remote_widget.root
+
+    assert %Model.ArgsReference{parts: ["corn", 0]} = child_arg
+    assert root_widget != nil
+
+    assert %Model.ConstructorCall{
+             name: "remote",
+             arguments: %{
+               "corn" => corn_value
+             }
+           } = root_widget.root
+
+    assert [
+             %Model.Loop{
+               input: %Model.DataReference{parts: ["list"]},
+               output: verify_call
+             }
+           ] = corn_value
+
+    assert %Model.ConstructorCall{
+             name: "verify",
+             arguments: %{
+               "value" => %Model.LoopReference{loop: 0}
+             }
+           } = verify_call
   end
 end
