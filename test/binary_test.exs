@@ -4,7 +4,9 @@ defmodule RfwFormats.BinaryTest do
   use ExUnit.Case
 
   alias RfwFormats.Binary
+  alias RfwFormats.Text
   alias RfwFormats.Model
+  alias RfwFormats.OrderedMap
 
   # This is a number that requires more than 32 bits but less than 53 bits,
   # so that it works in a JS Number and tests the logic that parses 64-bit ints as
@@ -143,7 +145,7 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Map example" do
-    bytes = Binary.encode_data_blob(%{"a" => 15})
+    bytes = Binary.encode_data_blob(OrderedMap.new([{"a", 15}]))
 
     # Bytes explanation:
     # 0xFE, 0x52, 0x57, 0x44 - Data blob signature
@@ -159,8 +161,7 @@ defmodule RfwFormats.BinaryTest do
                0x00, 0x00, 0x00>>
 
     value = Binary.decode_data_blob(bytes)
-    assert is_map(value)
-    assert value == %{"a" => 15}
+    assert value == %OrderedMap{keys: ["a"], map: %{"a" => 15}}
   end
 
   test "Signature check in decoders" do
@@ -295,6 +296,72 @@ defmodule RfwFormats.BinaryTest do
                  end
   end
 
+  test "Library decoder: live test" do
+    template = """
+    import widgets;
+    import material;
+
+    widget root = Scaffold(
+      appBar: AppBar(
+        title: Text(text: ['Counter Example']),
+        centerTitle: true,
+        backgroundColor: 0xFF002211,
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: "center",
+          children: [
+            Text(text: ["Connected Users: ", data.presence]),
+            SizedBox(height: 20),
+            Text(text: ["You have pushed the button this many times:"]),
+            Text(
+              text: [data.state],
+              style: {
+                fontSize: 20.0,
+              },
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: Row(
+        mainAxisAlignment: "end",
+        children: [
+          FloatingActionButton(
+            onPressed: event "decrement" {},
+            tooltip: ["Decrement"],
+            child: Icon(
+              icon: 0xe516,
+              fontFamily: 'MaterialIcons',
+            ),
+          ),
+          SizedBox(width: 10),
+          FloatingActionButton(
+            onPressed: event "increment" {},
+            tooltip: ["Increment"],
+            child: Icon(
+              icon: 0xe047,
+              fontFamily: 'MaterialIcons',
+            ),
+          ),
+        ],
+      ),
+    );
+    """
+
+    library = Text.parse_library_file(template)
+    bytes = Binary.encode_library_blob(library)
+
+    inspect_options = [limit: :infinity, printable_limit: :infinity]
+
+    Logger.debug("Decoded binary: #{inspect(bytes, inspect_options)}")
+
+    assert_raise RuntimeError,
+                 "Unrecognized data type 0xEF while decoding blob.",
+                 fn ->
+                   Binary.decode_library_blob(bytes)
+                 end
+  end
+
   test "Library encoder: args references" do
     library = %Model.RemoteWidgetLibrary{
       imports: [],
@@ -304,10 +371,11 @@ defmodule RfwFormats.BinaryTest do
           initial_state: nil,
           root: %Model.ConstructorCall{
             name: "b",
-            arguments: %{
-              "c" => [
-                %Model.ArgsReference{parts: ["d", 5]}
-              ]
+            arguments: %OrderedMap{
+              keys: ["c"],
+              map: %{
+                "c" => [%Model.ArgsReference{parts: ["d", 5]}]
+              }
             }
           }
         }
@@ -356,8 +424,8 @@ defmodule RfwFormats.BinaryTest do
     assert widget.initial_state == nil
     assert %Model.ConstructorCall{} = widget.root
     assert widget.root.name == "b"
-    assert map_size(widget.root.arguments) == 1
-    assert Map.has_key?(widget.root.arguments, "c")
+    assert OrderedMap.size(widget.root.arguments) == 1
+    assert OrderedMap.has_key?(widget.root.arguments, "c")
     assert [args_ref] = widget.root.arguments["c"]
     assert %Model.ArgsReference{} = args_ref
     assert args_ref.parts == ["d", 5]
@@ -372,10 +440,11 @@ defmodule RfwFormats.BinaryTest do
           initial_state: nil,
           root: %Model.ConstructorCall{
             name: "b",
-            arguments: %{
-              "c" => [
-                %Model.ArgsReference{parts: [false]}
-              ]
+            arguments: %OrderedMap{
+              keys: ["c"],
+              map: %{
+                "c" => [%Model.ArgsReference{parts: [false]}]
+              }
             }
           }
         }
@@ -412,19 +481,20 @@ defmodule RfwFormats.BinaryTest do
           initial_state: nil,
           root: %Model.ConstructorCall{
             name: "b",
-            arguments: %{
-              "c" => [
-                %Model.Loop{
-                  input: [],
-                  output: %Model.ConstructorCall{
-                    name: "d",
-                    arguments: %{
-                      "e" => %Model.LoopReference{loop: 0, parts: []}
-                    }
-                  }
-                }
-              ]
-            }
+            arguments:
+              OrderedMap.new([
+                {"c",
+                 [
+                   %Model.Loop{
+                     input: [],
+                     output: %Model.ConstructorCall{
+                       name: "d",
+                       arguments:
+                         OrderedMap.new([{"e", %Model.LoopReference{loop: 0, parts: []}}])
+                     }
+                   }
+                 ]}
+              ])
           }
         }
       ]
@@ -444,8 +514,9 @@ defmodule RfwFormats.BinaryTest do
           initial_state: nil,
           root: %Model.ConstructorCall{
             name: "b",
-            arguments: %{
-              "c" => %Model.DataReference{parts: ["d"]}
+            arguments: %OrderedMap{
+              keys: ["c"],
+              map: %{"c" => %Model.DataReference{parts: ["d"]}}
             }
           }
         }
@@ -466,8 +537,9 @@ defmodule RfwFormats.BinaryTest do
           initial_state: nil,
           root: %Model.ConstructorCall{
             name: "b",
-            arguments: %{
-              "c" => %Model.StateReference{parts: ["d"]}
+            arguments: %OrderedMap{
+              keys: ["c"],
+              map: %{"c" => %Model.StateReference{parts: ["d"]}}
             }
           }
         }
@@ -480,6 +552,8 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Library encoder: event handler" do
+    event_arguments = OrderedMap.new()
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -488,10 +562,10 @@ defmodule RfwFormats.BinaryTest do
           initial_state: nil,
           root: %Model.ConstructorCall{
             name: "b",
-            arguments: %{
-              "c" => %Model.EventHandler{
-                event_name: "d",
-                event_arguments: %{}
+            arguments: %OrderedMap{
+              keys: ["c"],
+              map: %{
+                "c" => %Model.EventHandler{event_name: "d", event_arguments: event_arguments}
               }
             }
           }
@@ -513,10 +587,13 @@ defmodule RfwFormats.BinaryTest do
           initial_state: nil,
           root: %Model.ConstructorCall{
             name: "b",
-            arguments: %{
-              "c" => %Model.SetStateHandler{
-                state_reference: %Model.StateReference{parts: ["d"]},
-                value: false
+            arguments: %OrderedMap{
+              keys: ["c"],
+              map: %{
+                "c" => %Model.SetStateHandler{
+                  state_reference: %Model.StateReference{parts: ["d"]},
+                  value: false
+                }
               }
             }
           }
@@ -530,15 +607,17 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Library encoder: initial state" do
+    initial_state = OrderedMap.new([{"b", false}])
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
         %Model.WidgetDeclaration{
           name: "a",
-          initial_state: %{"b" => false},
+          initial_state: initial_state,
           root: %Model.ConstructorCall{
             name: "c",
-            arguments: %{}
+            arguments: OrderedMap.new()
           }
         }
       ]
@@ -550,6 +629,15 @@ defmodule RfwFormats.BinaryTest do
   end
 
   test "Library encoder: widget builders work" do
+    text_arguments =
+      OrderedMap.new([
+        {"text",
+         %Model.WidgetBuilderArgReference{
+           argument_name: "scope",
+           parts: ["text"]
+         }}
+      ])
+
     library = %Model.RemoteWidgetLibrary{
       imports: [],
       widgets: [
@@ -558,16 +646,14 @@ defmodule RfwFormats.BinaryTest do
           initial_state: nil,
           root: %Model.ConstructorCall{
             name: "Builder",
-            arguments: %{
-              "builder" => %Model.WidgetBuilderDeclaration{
-                argument_name: "scope",
-                widget: %Model.ConstructorCall{
-                  name: "Text",
-                  arguments: %{
-                    "text" => %Model.WidgetBuilderArgReference{
-                      argument_name: "scope",
-                      parts: ["text"]
-                    }
+            arguments: %OrderedMap{
+              keys: ["builder"],
+              map: %{
+                "builder" => %Model.WidgetBuilderDeclaration{
+                  argument_name: "scope",
+                  widget: %Model.ConstructorCall{
+                    name: "Text",
+                    arguments: text_arguments
                   }
                 }
               }
@@ -588,15 +674,17 @@ defmodule RfwFormats.BinaryTest do
       widgets: [
         %Model.WidgetDeclaration{
           name: "a",
-          initial_state: %{},
+          initial_state: OrderedMap.new(),
           root: %Model.ConstructorCall{
             name: "c",
-            arguments: %{
-              "builder" => %Model.WidgetBuilderDeclaration{
-                argument_name: "scope",
-                widget: %Model.ArgsReference{parts: []}
-              }
-            }
+            arguments:
+              OrderedMap.new([
+                {"builder",
+                 %Model.WidgetBuilderDeclaration{
+                   argument_name: "scope",
+                   widget: %Model.ArgsReference{parts: []}
+                 }}
+              ])
           }
         }
       ]
@@ -617,7 +705,10 @@ defmodule RfwFormats.BinaryTest do
         %Model.WidgetDeclaration{
           name: "a",
           initial_state: nil,
-          root: %Model.Switch{input: "b", outputs: %{"c" => "d"}}
+          root: %Model.Switch{
+            input: "b",
+            outputs: OrderedMap.new([{"c", "d"}])
+          }
         }
       ]
     }
@@ -659,8 +750,8 @@ defmodule RfwFormats.BinaryTest do
     assert widget.initial_state == nil
     assert %Model.Switch{} = widget.root
     assert widget.root.input == "b"
-    assert map_size(widget.root.outputs) == 1
-    assert Map.has_key?(widget.root.outputs, "c")
+    assert OrderedMap.size(widget.root.outputs) == 1
+    assert OrderedMap.has_key?(widget.root.outputs, "c")
     assert widget.root.outputs["c"] == "d"
   end
 
@@ -673,8 +764,14 @@ defmodule RfwFormats.BinaryTest do
           initial_state: nil,
           root: %Model.ConstructorCall{
             name: "b",
-            arguments: %{
-              "c" => %Model.Switch{input: false, outputs: %{}}
+            arguments: %OrderedMap{
+              keys: ["c"],
+              map: %{
+                "c" => %Model.Switch{
+                  input: false,
+                  outputs: OrderedMap.new()
+                }
+              }
             }
           }
         }

@@ -4,6 +4,7 @@ defmodule RfwFormats.Binary do
   """
 
   alias RfwFormats.Model
+  alias RfwFormats.OrderedMap
 
   alias Model.{
     RemoteWidgetLibrary,
@@ -203,7 +204,10 @@ defmodule RfwFormats.Binary do
   defp write_value(encoder, true), do: write_byte(encoder, @ms_true)
   defp write_value(encoder, false), do: write_byte(encoder, @ms_false)
   defp write_value(encoder, v) when is_list(v), do: write_list(encoder, v)
-  defp write_value(encoder, v) when is_map(v), do: write_map(encoder, v)
+
+  defp write_value(encoder, %OrderedMap{} = v) do
+    write_map(encoder, v, tagged: true)
+  end
 
   defp write_value(encoder, v) when is_integer(v) do
     [encoder, @ms_int64, <<v::little-signed-integer-size(64)>>]
@@ -216,7 +220,7 @@ defmodule RfwFormats.Binary do
   defp write_value(encoder, v) when is_binary(v),
     do: [encoder, [@ms_string | write_string([], v)]]
 
-  defp write_value(_encoder, nil), do: write_map([], %{})
+  defp write_value(_encoder, nil), do: write_map([], OrderedMap.new())
 
   defp write_value(_encoder, value),
     do: raise(ArgumentError, "Unsupported value type: #{inspect(value)}")
@@ -226,16 +230,20 @@ defmodule RfwFormats.Binary do
     |> then(fn e -> Enum.reduce(list, e, &write_value(&2, &1)) end)
   end
 
-  defp write_map(encoder, map) do
-    sorted_map = Map.to_list(map) |> Enum.sort()
+  defp write_map(encoder, %OrderedMap{} = map, opts \\ []) do
+    tagged = Keyword.get(opts, :tagged, true)
 
-    [encoder, [@ms_map, <<map_size(map)::little-unsigned-integer-size(64)>>]]
-    |> then(fn e ->
-      Enum.reduce(sorted_map, e, fn {k, v}, acc ->
-        acc
-        |> write_string(to_string(k))
-        |> write_value(v)
-      end)
+    encoder =
+      if tagged do
+        [encoder, [@ms_map, <<OrderedMap.size(map)::little-unsigned-integer-size(64)>>]]
+      else
+        [encoder, <<OrderedMap.size(map)::little-unsigned-integer-size(64)>>]
+      end
+
+    Enum.reduce(map.keys, encoder, fn key, acc ->
+      acc
+      |> write_string(to_string(key))
+      |> write_value(Map.get(map.map, key))
     end)
   end
 
@@ -272,7 +280,7 @@ defmodule RfwFormats.Binary do
   defp write_event_handler(encoder, %EventHandler{event_name: name, event_arguments: args}) do
     [encoder, [@ms_event]]
     |> write_string(name)
-    |> write_map(args)
+    |> write_map(args, tagged: false)
   end
 
   defp write_set_state_handler(encoder, %SetStateHandler{state_reference: ref, value: value}) do
@@ -284,14 +292,7 @@ defmodule RfwFormats.Binary do
   defp write_constructor_call(encoder, %ConstructorCall{name: name, arguments: arguments}) do
     [encoder, [@ms_widget]]
     |> write_string(name)
-    |> write_int64(map_size(arguments))
-    |> then(fn e ->
-      Enum.reduce(arguments, e, fn {k, v}, acc ->
-        acc
-        |> write_string(to_string(k))
-        |> write_value(v)
-      end)
-    end)
+    |> write_map(arguments, tagged: false)
   end
 
   defp write_switch(encoder, %Switch{input: input, outputs: outputs}) do
@@ -330,19 +331,21 @@ defmodule RfwFormats.Binary do
     end)
   end
 
-  defp write_switch_outputs(encoder, outputs) do
-    encoder = write_int64(encoder, map_size(outputs))
+  defp write_switch_outputs(encoder, %OrderedMap{} = outputs) do
+    encoder = write_int64(encoder, OrderedMap.size(outputs))
 
-    Enum.reduce(outputs, encoder, fn
-      {nil, v}, acc ->
-        acc
-        |> write_byte(@ms_default)
-        |> write_value(v)
+    Enum.reduce(outputs.keys, encoder, fn key, acc ->
+      case key do
+        nil ->
+          acc
+          |> write_byte(@ms_default)
+          |> write_value(Map.get(outputs.map, key))
 
-      {k, v}, acc ->
-        acc
-        |> write_value(k)
-        |> write_value(v)
+        k ->
+          acc
+          |> write_value(k)
+          |> write_value(Map.get(outputs.map, k))
+      end
     end)
   end
 
@@ -361,22 +364,8 @@ defmodule RfwFormats.Binary do
        }) do
     encoder
     |> write_string(name)
-    |> write_initial_state(initial_state)
+    |> write_map(initial_state || OrderedMap.new(), tagged: false)
     |> write_value(root)
-  end
-
-  defp write_initial_state(encoder, nil) do
-    write_int64(encoder, 0)
-  end
-
-  defp write_initial_state(encoder, initial_state) when is_map(initial_state) do
-    encoder = write_int64(encoder, map_size(initial_state))
-
-    Enum.reduce(initial_state, encoder, fn {k, v}, acc ->
-      acc
-      |> write_string(to_string(k))
-      |> write_value(v)
-    end)
   end
 
   defp write_import(encoder, %Import{name: %Model.LibraryName{parts: parts}}) do
@@ -496,7 +485,7 @@ defmodule RfwFormats.Binary do
     end
   end
 
-  defp read_n_pairs(decoder, 0, acc), do: {:ok, {Enum.into(acc, %{}), decoder}}
+  defp read_n_pairs(decoder, 0, acc), do: {:ok, {OrderedMap.new(Enum.reverse(acc)), decoder}}
 
   defp read_n_pairs(decoder, n, acc) when n > 0 do
     with {:ok, {key, decoder1}} <- read_string(decoder),
@@ -521,16 +510,7 @@ defmodule RfwFormats.Binary do
 
   defp read_constructor_arguments(decoder) do
     with {:ok, {length, decoder}} <- read_int64(decoder) do
-      read_n_constructor_arguments(decoder, length, [])
-    end
-  end
-
-  defp read_n_constructor_arguments(decoder, 0, acc), do: {:ok, {Enum.into(acc, %{}), decoder}}
-
-  defp read_n_constructor_arguments(decoder, n, acc) when n > 0 do
-    with {:ok, {key, decoder}} <- read_string(decoder),
-         {:ok, {value, decoder}} <- read_value(decoder) do
-      read_n_constructor_arguments(decoder, n - 1, [{key, value} | acc])
+      read_n_pairs(decoder, length, [])
     end
   end
 
@@ -585,7 +565,9 @@ defmodule RfwFormats.Binary do
     end
   end
 
-  defp read_n_switch_cases(decoder, 0, acc), do: {:ok, {Enum.into(acc, %{}), decoder}}
+  defp read_n_switch_cases(decoder, 0, acc) do
+    {:ok, {OrderedMap.new(Enum.reverse(acc)), decoder}}
+  end
 
   defp read_n_switch_cases(decoder, n, acc) when n > 0 do
     with {:ok, {key, decoder}} <- read_switch_key(decoder),
