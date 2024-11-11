@@ -421,6 +421,20 @@ defmodule RfwFormats.TextTest do
     assert %Model.Switch{input: 1, outputs: %OrderedMap{keys: [2], map: %{2 => 3}}} = switch
   end
 
+  test "parseLibraryFile: widgetBuilders check the returned value" do
+    assert_raise Text.Error, "Expecting a switch or constructor call got 1 at line 1", fn ->
+      Text.parse_library_file("widget a = B(b: (foo) => 1);")
+    end
+  end
+
+  test "parseLibraryFile: widgetBuilders check reserved words" do
+    assert_raise Text.Error, "args is a reserved word at line 1", fn ->
+      Text.parse_library_file(
+        "widget a = Builder(builder: (args) => Container(width: args.width));"
+      )
+    end
+  end
+
   test "parseLibraryFile: references" do
     result = Text.parse_library_file("widget a = b(c:data.11234567890.\"e\");")
     widget = hd(result.widgets)
@@ -781,13 +795,31 @@ defmodule RfwFormats.TextTest do
 
     widget = hd(result.widgets)
     assert widget.name == "a"
-    assert %Model.ConstructorCall{name: "A", arguments: %{"a" => builder1}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "A",
+             arguments: %OrderedMap{keys: ["a"], map: %{"a" => builder1}}
+           } = widget.root
+
     assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder1
-    assert %Model.ConstructorCall{name: "B", arguments: %{"b" => builder2}} = b_call
+
+    assert %Model.ConstructorCall{
+             name: "B",
+             arguments: %OrderedMap{keys: ["b"], map: %{"b" => builder2}}
+           } = b_call
+
     assert %Model.WidgetBuilderDeclaration{argument_name: "s2", widget: t_call} = builder2
 
-    assert %Model.ConstructorCall{name: "T", arguments: %{"s1" => s1_ref, "s2" => s2_ref}} =
-             t_call
+    assert %Model.ConstructorCall{
+             name: "T",
+             arguments: %OrderedMap{
+               keys: ["s1", "s2"],
+               map: %{
+                 "s1" => s1_ref,
+                 "s2" => s2_ref
+               }
+             }
+           } = t_call
 
     assert %Model.WidgetBuilderArgReference{argument_name: "s1", parts: ["s1"]} = s1_ref
     assert %Model.WidgetBuilderArgReference{argument_name: "s2", parts: ["s2"]} = s2_ref
@@ -805,26 +837,27 @@ defmodule RfwFormats.TextTest do
 
     widget = hd(result.widgets)
     assert widget.name == "a"
-    assert %Model.ConstructorCall{name: "A", arguments: %{"a" => builder1}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "A",
+             arguments: %OrderedMap{keys: ["a"], map: %{"a" => builder1}}
+           } = widget.root
+
     assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder1
-    assert %Model.ConstructorCall{name: "B", arguments: %{"b" => builder2}} = b_call
+
+    assert %Model.ConstructorCall{
+             name: "B",
+             arguments: %OrderedMap{keys: ["b"], map: %{"b" => builder2}}
+           } = b_call
+
     assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: t_call} = builder2
-    assert %Model.ConstructorCall{name: "T", arguments: %{"t" => t_ref}} = t_call
+
+    assert %Model.ConstructorCall{
+             name: "T",
+             arguments: %OrderedMap{keys: ["t"], map: %{"t" => t_ref}}
+           } = t_call
+
     assert %Model.WidgetBuilderArgReference{argument_name: "s1", parts: ["foo"]} = t_ref
-  end
-
-  test "parseLibraryFile: widgetBuilders check the returned value" do
-    assert_raise Text.Error, "Expecting a switch or constructor call got 1 at line 1", fn ->
-      Text.parse_library_file("widget a = B(b: (foo) => 1);")
-    end
-  end
-
-  test "parseLibraryFile: widgetBuilders check reserved words" do
-    assert_raise Text.Error, "args is a reserved word at line 1", fn ->
-      Text.parse_library_file(
-        "widget a = Builder(builder: (args) => Container(width: args.width));"
-      )
-    end
   end
 
   test "parseLibraryFile: switch works with widgetBuilders" do
@@ -840,18 +873,31 @@ defmodule RfwFormats.TextTest do
 
     widget = hd(result.widgets)
     assert widget.name == "a"
-    assert %Model.ConstructorCall{name: "A", arguments: %{"b" => switch}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "A",
+             arguments: %OrderedMap{keys: ["b"], map: %{"b" => switch}}
+           } = widget.root
 
     assert %Model.Switch{
              input: %Model.ArgsReference{parts: ["down"]},
-             outputs: %{
-               true => %Model.WidgetBuilderDeclaration{
-                 argument_name: "foo",
-                 widget: %Model.ConstructorCall{name: "B"}
-               },
-               false => %Model.WidgetBuilderDeclaration{
-                 argument_name: "bar",
-                 widget: %Model.ConstructorCall{name: "C"}
+             outputs: %OrderedMap{
+               keys: [true, false],
+               map: %{
+                 true => %Model.WidgetBuilderDeclaration{
+                   argument_name: "foo",
+                   widget: %Model.ConstructorCall{
+                     name: "B",
+                     arguments: %OrderedMap{keys: [], map: %{}}
+                   }
+                 },
+                 false => %Model.WidgetBuilderDeclaration{
+                   argument_name: "bar",
+                   widget: %Model.ConstructorCall{
+                     name: "C",
+                     arguments: %OrderedMap{keys: [], map: %{}}
+                   }
+                 }
                }
              }
            } = switch
@@ -870,7 +916,12 @@ defmodule RfwFormats.TextTest do
 
     widget = hd(result.widgets)
     assert widget.name == "a"
-    assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "A",
+             arguments: %OrderedMap{keys: ["b"], map: %{"b" => builder}}
+           } = widget.root
+
     assert %Model.WidgetBuilderDeclaration{argument_name: "foo", widget: switch} = builder
 
     assert %Model.Switch{
@@ -986,8 +1037,6 @@ defmodule RfwFormats.TextTest do
            } = event_handler
   end
 
-  # ... [other tests unchanged until complex nested structures] ...
-
   test "parseLibraryFile: complex nested structures" do
     result =
       Text.parse_library_file("""
@@ -1057,47 +1106,35 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.Switch{
              input: %Model.LoopReference{loop: 0, parts: ["type"]},
-             outputs: %OrderedMap{
-               keys: ["button", "checkbox", nil],
-               map: %{
-                 "button" => %Model.ConstructorCall{
-                   name: "Button",
-                   arguments: %OrderedMap{
-                     keys: ["onPressed", "child"],
-                     map: %{
-                       "onPressed" => %Model.EventHandler{
-                         event_name: "buttonPressed",
-                         event_arguments: %OrderedMap{
-                           keys: ["id"],
-                           map: %{
-                             "id" => %Model.LoopReference{loop: 0, parts: ["id"]}
-                           }
-                         }
-                       },
-                       "child" => %Model.ConstructorCall{
-                         name: "Text",
-                         arguments: %OrderedMap{keys: ["text"], map: %{"text" => "Press me"}}
-                       }
+             outputs: %{
+               "button" => %Model.ConstructorCall{
+                 name: "Button",
+                 arguments: %{
+                   "onPressed" => %Model.EventHandler{
+                     event_name: "buttonPressed",
+                     event_arguments: %{
+                       "id" => %Model.LoopReference{loop: 0, parts: ["id"]}
                      }
+                   },
+                   "child" => %Model.ConstructorCall{
+                     name: "Text",
+                     arguments: %{"text" => "Press me"}
                    }
-                 },
-                 "checkbox" => %Model.ConstructorCall{
-                   name: "Checkbox",
-                   arguments: %OrderedMap{
-                     keys: ["value", "onChanged"],
-                     map: %{
-                       "value" => %Model.StateReference{parts: ["value"]},
-                       "onChanged" => %Model.SetStateHandler{
-                         state_reference: %Model.StateReference{parts: ["values"]},
-                         value: %Model.LoopReference{loop: 0, parts: ["id"]}
-                       }
-                     }
-                   }
-                 },
-                 nil => %Model.ConstructorCall{
-                   name: "Text",
-                   arguments: %OrderedMap{keys: ["text"], map: %{"text" => "Unknown type"}}
                  }
+               },
+               "checkbox" => %Model.ConstructorCall{
+                 name: "Checkbox",
+                 arguments: %{
+                   "value" => %Model.StateReference{parts: ["value"]},
+                   "onChanged" => %Model.SetStateHandler{
+                     state_reference: %Model.StateReference{parts: ["values"]},
+                     value: %Model.LoopReference{loop: 0, parts: ["id"]}
+                   }
+                 }
+               },
+               nil => %Model.ConstructorCall{
+                 name: "Text",
+                 arguments: %{"text" => "Unknown type"}
                }
              }
            } = switch
