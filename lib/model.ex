@@ -3,6 +3,8 @@ defmodule RfwFormats.Model do
   Defines data structures for Remote Flutter Widgets.
   """
 
+  alias RfwFormats.OrderedMap
+
   defmodule Missing do
     @moduledoc """
     Represents a missing value in the data structure.
@@ -23,7 +25,7 @@ defmodule RfwFormats.Model do
   @spec is_missing?(any()) :: boolean()
   def is_missing?(value), do: match?(%Missing{}, value)
 
-  @type dynamic_map :: %{required(String.t()) => dynamic_value()}
+  @type dynamic_map :: OrderedMap.t()
   @type dynamic_list :: [dynamic_value()]
   @type dynamic_value ::
           dynamic_map()
@@ -497,6 +499,10 @@ defmodule RfwFormats.Model do
   Creates a deep clone of a data structure.
   """
   @spec deep_clone(any()) :: any()
+  def deep_clone(%OrderedMap{} = value) do
+    OrderedMap.new(Enum.map(OrderedMap.to_list(value), fn {k, v} -> {k, deep_clone(v)} end))
+  end
+
   def deep_clone(value) when is_struct(value) do
     struct(value.__struct__, Map.new(value, fn {k, v} -> {k, deep_clone(v)} end))
   end
