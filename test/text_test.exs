@@ -926,9 +926,18 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.Switch{
              input: %Model.WidgetBuilderArgReference{argument_name: "foo", parts: ["letter"]},
-             outputs: %{
-               "a" => %Model.ConstructorCall{name: "A"},
-               "b" => %Model.ConstructorCall{name: "B"}
+             outputs: %OrderedMap{
+               keys: ["a", "b"],
+               map: %{
+                 "a" => %Model.ConstructorCall{
+                   name: "A",
+                   arguments: %OrderedMap{keys: [], map: %{}}
+                 },
+                 "b" => %Model.ConstructorCall{
+                   name: "B",
+                   arguments: %OrderedMap{keys: [], map: %{}}
+                 }
+               }
              }
            } = switch
   end
@@ -943,9 +952,27 @@ defmodule RfwFormats.TextTest do
 
     widget = hd(result.widgets)
     assert widget.name == "a"
-    assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "A",
+             arguments: %OrderedMap{
+               keys: ["b"],
+               map: %{
+                 "b" => builder
+               }
+             }
+           } = widget.root
+
     assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder
-    assert %Model.ConstructorCall{name: "B", arguments: %{"c" => [c_ref]}} = b_call
+
+    assert %Model.ConstructorCall{
+             name: "B",
+             arguments: %OrderedMap{
+               keys: ["c"],
+               map: %{"c" => [c_ref]}
+             }
+           } = b_call
+
     assert %Model.WidgetBuilderArgReference{argument_name: "s1", parts: ["c"]} = c_ref
   end
 
@@ -989,9 +1016,26 @@ defmodule RfwFormats.TextTest do
     widget = hd(result.widgets)
     assert widget.name == "a"
     assert widget.initial_state == %OrderedMap{keys: ["foo"], map: %{"foo" => 0}}
-    assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "A",
+             arguments: %OrderedMap{
+               keys: ["b"],
+               map: %{
+                 "b" => builder
+               }
+             }
+           } = widget.root
+
     assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder
-    assert %Model.ConstructorCall{name: "B", arguments: %{"onTap" => setter}} = b_call
+
+    assert %Model.ConstructorCall{
+             name: "B",
+             arguments: %OrderedMap{
+               keys: ["onTap"],
+               map: %{"onTap" => setter}
+             }
+           } = b_call
 
     assert %Model.SetStateHandler{
              state_reference: %Model.StateReference{parts: ["foo"]},
@@ -1106,35 +1150,51 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.Switch{
              input: %Model.LoopReference{loop: 0, parts: ["type"]},
-             outputs: %{
-               "button" => %Model.ConstructorCall{
-                 name: "Button",
-                 arguments: %{
-                   "onPressed" => %Model.EventHandler{
-                     event_name: "buttonPressed",
-                     event_arguments: %{
-                       "id" => %Model.LoopReference{loop: 0, parts: ["id"]}
+             outputs: %OrderedMap{
+               keys: ["button", "checkbox", nil],
+               map: %{
+                 "button" => %Model.ConstructorCall{
+                   name: "Button",
+                   arguments: %OrderedMap{
+                     keys: ["onPressed", "child"],
+                     map: %{
+                       "onPressed" => %Model.EventHandler{
+                         event_name: "buttonPressed",
+                         event_arguments: %OrderedMap{
+                           keys: ["id"],
+                           map: %{"id" => %Model.LoopReference{loop: 0, parts: ["id"]}}
+                         }
+                       },
+                       "child" => %Model.ConstructorCall{
+                         name: "Text",
+                         arguments: %OrderedMap{
+                           keys: ["text"],
+                           map: %{"text" => "Press me"}
+                         }
+                       }
                      }
-                   },
-                   "child" => %Model.ConstructorCall{
-                     name: "Text",
-                     arguments: %{"text" => "Press me"}
+                   }
+                 },
+                 "checkbox" => %Model.ConstructorCall{
+                   name: "Checkbox",
+                   arguments: %OrderedMap{
+                     keys: ["value", "onChanged"],
+                     map: %{
+                       "value" => %Model.StateReference{parts: ["value"]},
+                       "onChanged" => %Model.SetStateHandler{
+                         state_reference: %Model.StateReference{parts: ["values"]},
+                         value: %Model.LoopReference{loop: 0, parts: ["id"]}
+                       }
+                     }
+                   }
+                 },
+                 nil => %Model.ConstructorCall{
+                   name: "Text",
+                   arguments: %OrderedMap{
+                     keys: ["text"],
+                     map: %{"text" => "Unknown type"}
                    }
                  }
-               },
-               "checkbox" => %Model.ConstructorCall{
-                 name: "Checkbox",
-                 arguments: %{
-                   "value" => %Model.StateReference{parts: ["value"]},
-                   "onChanged" => %Model.SetStateHandler{
-                     state_reference: %Model.StateReference{parts: ["values"]},
-                     value: %Model.LoopReference{loop: 0, parts: ["id"]}
-                   }
-                 }
-               },
-               nil => %Model.ConstructorCall{
-                 name: "Text",
-                 arguments: %{"text" => "Unknown type"}
                }
              }
            } = switch

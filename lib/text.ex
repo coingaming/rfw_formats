@@ -6,6 +6,7 @@ defmodule RfwFormats.Text do
   import NimbleParsec
 
   alias RfwFormats.Model
+  alias RfwFormats.OrderedMap
 
   @reserved_words ~w(args data event false set state true)
 
@@ -242,18 +243,15 @@ defmodule RfwFormats.Text do
     |> map({:create_map, []})
     |> label("map")
 
-  defp create_map([]), do: %{}
+  defp create_map([]), do: OrderedMap.new()
 
   defp create_map(pairs) do
     chunked = Enum.chunk_every(pairs, 2)
 
-    Enum.reduce(chunked, %{}, fn pair, acc ->
+    Enum.reduce(chunked, OrderedMap.new(), fn pair, acc ->
       case pair do
-        [_k, :__null__] ->
-          acc
-
-        [k, v] ->
-          Map.put(acc, k, v)
+        [_k, :__null__] -> acc
+        [k, v] -> OrderedMap.put(acc, k, v)
       end
     end)
   end
@@ -517,14 +515,14 @@ defmodule RfwFormats.Text do
     initial_state =
       case initial_state_list do
         [state] -> state
-        nil -> %{}
+        nil -> OrderedMap.new()
       end
 
     [name, initial_state, root]
   end
 
   defp assemble_widget_declaration_args([name, root]) do
-    [name, %{}, root]
+    [name, OrderedMap.new(), root]
   end
 
   widget_builder =
