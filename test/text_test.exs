@@ -2,10 +2,11 @@ defmodule RfwFormats.TextTest do
   use ExUnit.Case
   alias RfwFormats.Text
   alias RfwFormats.Model
+  alias RfwFormats.OrderedMap
 
   test "empty parseDataFile" do
     result = Text.parse_data_file("{}")
-    assert result == %{}
+    assert %OrderedMap{keys: [], map: %{}} = result
   end
 
   test "empty parseLibraryFile" do
@@ -15,7 +16,7 @@ defmodule RfwFormats.TextTest do
 
   test "space parseDataFile" do
     result = Text.parse_data_file(" \n {} \n ")
-    assert result == %{}
+    assert %OrderedMap{keys: [], map: %{}} = result
   end
 
   test "space parseLibraryFile" do
@@ -24,98 +25,319 @@ defmodule RfwFormats.TextTest do
   end
 
   test "valid values in parseDataFile" do
-    assert Text.parse_data_file("{ }\n\n  \n\n") == %{}
-    assert Text.parse_data_file("{ a: \"b\" }") == %{"a" => "b"}
-    assert Text.parse_data_file("{ a: [ \"b\", 9 ] }") == %{"a" => ["b", 9]}
-    assert Text.parse_data_file("{ a: { } }") == %{"a" => %{}}
-    assert Text.parse_data_file("{ a: 123.456e7 }") == %{"a" => 123.456e7}
-    assert Text.parse_data_file("{ a: true }") == %{"a" => true}
-    assert Text.parse_data_file("{ a: false }") == %{"a" => false}
-    assert Text.parse_data_file("{ \"a\": 0 }") == %{"a" => 0}
-    assert Text.parse_data_file("{ \"a\": -0, b: \"x\" }") == %{"a" => 0, "b" => "x"}
-    assert Text.parse_data_file("{ \"a\": null }") == %{}
-    assert Text.parse_data_file("{ \"a\": -6 }") == %{"a" => -6}
-    assert Text.parse_data_file("{ \"a\": -7 }") == %{"a" => -7}
-    assert Text.parse_data_file("{ \"a\": -8 }") == %{"a" => -8}
-    assert Text.parse_data_file("{ \"a\": -9 }") == %{"a" => -9}
-    assert Text.parse_data_file("{ \"a\": 01 }") == %{"a" => 1}
-    assert Text.parse_data_file("{ \"a\": 0e0 }") == %{"a" => 0.0}
-    assert Text.parse_data_file("{ \"a\": 0e1 }") == %{"a" => 0.0}
-    assert Text.parse_data_file("{ \"a\": 0e8 }") == %{"a" => 0.0}
-    assert Text.parse_data_file("{ \"a\": 1e9 }") == %{"a" => 1.0e9}
-    assert Text.parse_data_file("{ \"a\": -0e1 }") == %{"a" => 0.0}
-    assert Text.parse_data_file("{ \"a\": 00e1 }") == %{"a" => 0.0}
-    assert Text.parse_data_file("{ \"a\": -00e1 }") == %{"a" => 0.0}
-    assert Text.parse_data_file("{ \"a\": 00.0e1 }") == %{"a" => 0.0}
-    assert Text.parse_data_file("{ \"a\": -00.0e1 }") == %{"a" => 0.0}
-    assert Text.parse_data_file("{ \"a\": -00.0e-1 }") == %{"a" => 0.0}
-    assert Text.parse_data_file("{ \"a\": -1e-1 }") == %{"a" => -0.1}
-    assert Text.parse_data_file("{ \"a\": -1e-2 }") == %{"a" => -0.01}
-    assert Text.parse_data_file("{ \"a\": -1e-3 }") == %{"a" => -0.001}
-    assert Text.parse_data_file("{ \"a\": -1e-4 }") == %{"a" => -0.0001}
-    assert Text.parse_data_file("{ \"a\": -1e-5 }") == %{"a" => -0.00001}
-    assert Text.parse_data_file("{ \"a\": -1e-6 }") == %{"a" => -0.000001}
-    assert Text.parse_data_file("{ \"a\": -1e-7 }") == %{"a" => -0.0000001}
-    assert Text.parse_data_file("{ \"a\": -1e-8 }") == %{"a" => -0.00000001}
-    assert Text.parse_data_file("{ \"a\": -1e-9 }") == %{"a" => -0.000000001}
-    assert Text.parse_data_file("{ \"a\": -1e-10 }") == %{"a" => -0.0000000001}
-    assert Text.parse_data_file("{ \"a\": -1e-11 }") == %{"a" => -0.00000000001}
-    assert Text.parse_data_file("{ \"a\": -1e-12 }") == %{"a" => -0.000000000001}
-    assert Text.parse_data_file("{ \"a\": -1e-13 }") == %{"a" => -0.0000000000001}
-    assert Text.parse_data_file("{ \"a\": -1e-14 }") == %{"a" => -0.00000000000001}
-    assert Text.parse_data_file("{ \"a\": -1e-15 }") == %{"a" => -0.000000000000001}
-    assert Text.parse_data_file("{ \"a\": -1e-16 }") == %{"a" => -0.0000000000000001}
-    assert Text.parse_data_file("{ \"a\": -1e-17 }") == %{"a" => -0.00000000000000001}
-    assert Text.parse_data_file("{ \"a\": -1e-18 }") == %{"a" => -1.0e-18}
-    assert Text.parse_data_file("{ \"a\": -1e-19 }") == %{"a" => -1.0e-19}
-    assert Text.parse_data_file("{ \"a\": 0x0 }") == %{"a" => 0}
-    assert Text.parse_data_file("{ \"a\": 0x1 }") == %{"a" => 1}
-    assert Text.parse_data_file("{ \"a\": 0x01 }") == %{"a" => 1}
-    assert Text.parse_data_file("{ \"a\": 0xa }") == %{"a" => 10}
-    assert Text.parse_data_file("{ \"a\": 0xb }") == %{"a" => 11}
-    assert Text.parse_data_file("{ \"a\": 0xc }") == %{"a" => 12}
-    assert Text.parse_data_file("{ \"a\": 0xd }") == %{"a" => 13}
-    assert Text.parse_data_file("{ \"a\": 0xe }") == %{"a" => 14}
-    assert Text.parse_data_file("{ \"a\": 0xfa }") == %{"a" => 250}
-    assert Text.parse_data_file("{ \"a\": 0xfb }") == %{"a" => 251}
-    assert Text.parse_data_file("{ \"a\": 0xfc }") == %{"a" => 252}
-    assert Text.parse_data_file("{ \"a\": 0xfd }") == %{"a" => 253}
-    assert Text.parse_data_file("{ \"a\": 0xfe }") == %{"a" => 254}
+    assert Text.parse_data_file("{ }\n\n  \n\n") == %OrderedMap{keys: [], map: %{}}
+    assert Text.parse_data_file("{ a: \"b\" }") == %OrderedMap{keys: ["a"], map: %{"a" => "b"}}
 
-    assert Text.parse_data_file("{ \"a\": '\\\"\\/\\'\\b\\f\\n\\r\\t\\\\' }") == %{
-             "a" => "\"/'\b\f\n\r\t\\"
+    assert Text.parse_data_file("{ a: [ \"b\", 9 ] }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => ["b", 9]}
            }
 
-    assert Text.parse_data_file("{ \"a\": '\\\"\\/\\'\\b\\f\\n\\r\\t\\\\' }") == %{
-             "a" => "\"/'\b\f\n\r\t\\"
+    assert Text.parse_data_file("{ a: { } }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => %OrderedMap{keys: [], map: %{}}}
            }
 
-    assert Text.parse_data_file("{ \"a\": \"\\u263A\" }") == %{"a" => "☺"}
-    assert Text.parse_data_file("{ \"a\": \"\\u0000\" }") == %{"a" => <<0>>}
-    assert Text.parse_data_file("{ \"a\": \"\\u1111\" }") == %{"a" => "ᄑ"}
-    assert Text.parse_data_file("{ \"a\": \"\\u2222\" }") == %{"a" => "∢"}
-    assert Text.parse_data_file("{ \"a\": \"\\u3333\" }") == %{"a" => "㌳"}
-    assert Text.parse_data_file("{ \"a\": \"\\u4444\" }") == %{"a" => "䑄"}
-    assert Text.parse_data_file("{ \"a\": \"\\u5555\" }") == %{"a" => "啕"}
-    assert Text.parse_data_file("{ \"a\": \"\\u6666\" }") == %{"a" => "晦"}
-    assert Text.parse_data_file("{ \"a\": \"\\u7777\" }") == %{"a" => "睷"}
-    assert Text.parse_data_file("{ \"a\": \"\\u8888\" }") == %{"a" => "袈"}
-    assert Text.parse_data_file("{ \"a\": \"\\u9999\" }") == %{"a" => "香"}
-    assert Text.parse_data_file("{ \"a\": \"\\uaaaa\" }") == %{"a" => "ꪪ"}
-    assert Text.parse_data_file("{ \"a\": \"\\ubbbb\" }") == %{"a" => "뮻"}
-    assert Text.parse_data_file("{ \"a\": \"\\ucccc\" }") == %{"a" => "쳌"}
-    assert Text.parse_data_file("{ \"a\": \"\\udddd\" }") == %{"a" => <<0xDD, 0xDD>>}
-    assert Text.parse_data_file("{ \"a\": \"\\ueeee\" }") == %{"a" => <<0xEE, 0xEE>>}
-    assert Text.parse_data_file("{ \"a\": \"\\uffff\" }") == %{"a" => <<0xFF, 0xFF>>}
-    assert Text.parse_data_file("{ \"a\": \"\\uAAAA\" }") == %{"a" => "ꪪ"}
-    assert Text.parse_data_file("{ \"a\": \"\\uBBBB\" }") == %{"a" => "뮻"}
-    assert Text.parse_data_file("{ \"a\": \"\\uCCCC\" }") == %{"a" => "쳌"}
-    assert Text.parse_data_file("{ \"a\": \"\\uDDDD\" }") == %{"a" => <<0xDD, 0xDD>>}
-    assert Text.parse_data_file("{ \"a\": \"\\uEEEE\" }") == %{"a" => <<0xEE, 0xEE>>}
-    assert Text.parse_data_file("{ \"a\": \"\\uFFFF\" }") == %{"a" => <<0xFF, 0xFF>>}
-    assert Text.parse_data_file("{ \"a\": /**/ \"1\" }") == %{"a" => "1"}
-    assert Text.parse_data_file("{ \"a\": /* */ \"1\" }") == %{"a" => "1"}
-    assert Text.parse_data_file("{ \"a\": /*\n*/ \"1\" }") == %{"a" => "1"}
+    assert Text.parse_data_file("{ a: 123.456e7 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => 123.456e7}
+           }
+
+    assert Text.parse_data_file("{ a: true }") == %OrderedMap{keys: ["a"], map: %{"a" => true}}
+    assert Text.parse_data_file("{ a: false }") == %OrderedMap{keys: ["a"], map: %{"a" => false}}
+    assert Text.parse_data_file("{ \"a\": 0 }") == %OrderedMap{keys: ["a"], map: %{"a" => 0}}
+
+    assert Text.parse_data_file("{ \"a\": -0, b: \"x\" }") == %OrderedMap{
+             keys: ["a", "b"],
+             map: %{"a" => 0, "b" => "x"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": null }") == %OrderedMap{keys: [], map: %{}}
+    assert Text.parse_data_file("{ \"a\": -6 }") == %OrderedMap{keys: ["a"], map: %{"a" => -6}}
+    assert Text.parse_data_file("{ \"a\": -7 }") == %OrderedMap{keys: ["a"], map: %{"a" => -7}}
+    assert Text.parse_data_file("{ \"a\": -8 }") == %OrderedMap{keys: ["a"], map: %{"a" => -8}}
+    assert Text.parse_data_file("{ \"a\": -9 }") == %OrderedMap{keys: ["a"], map: %{"a" => -9}}
+    assert Text.parse_data_file("{ \"a\": 01 }") == %OrderedMap{keys: ["a"], map: %{"a" => 1}}
+    assert Text.parse_data_file("{ \"a\": 0e0 }") == %OrderedMap{keys: ["a"], map: %{"a" => 0.0}}
+    assert Text.parse_data_file("{ \"a\": 0e1 }") == %OrderedMap{keys: ["a"], map: %{"a" => 0.0}}
+    assert Text.parse_data_file("{ \"a\": 0e8 }") == %OrderedMap{keys: ["a"], map: %{"a" => 0.0}}
+
+    assert Text.parse_data_file("{ \"a\": 1e9 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => 1.0e9}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -0e1 }") == %OrderedMap{keys: ["a"], map: %{"a" => 0.0}}
+    assert Text.parse_data_file("{ \"a\": 00e1 }") == %OrderedMap{keys: ["a"], map: %{"a" => 0.0}}
+
+    assert Text.parse_data_file("{ \"a\": -00e1 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => 0.0}
+           }
+
+    assert Text.parse_data_file("{ \"a\": 00.0e1 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => 0.0}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -00.0e1 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => 0.0}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -00.0e-1 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => 0.0}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-1 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.1}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-2 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.01}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-3 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-4 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.0001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-5 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.00001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-6 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-7 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.0000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-8 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.00000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-9 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.000000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-10 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.0000000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-11 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.00000000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-12 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.000000000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-13 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.0000000000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-14 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.00000000000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-15 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.000000000000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-16 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.0000000000000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-17 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -0.00000000000000001}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-18 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -1.0e-18}
+           }
+
+    assert Text.parse_data_file("{ \"a\": -1e-19 }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => -1.0e-19}
+           }
+
+    assert Text.parse_data_file("{ \"a\": 0x0 }") == %OrderedMap{keys: ["a"], map: %{"a" => 0}}
+    assert Text.parse_data_file("{ \"a\": 0x1 }") == %OrderedMap{keys: ["a"], map: %{"a" => 1}}
+    assert Text.parse_data_file("{ \"a\": 0x01 }") == %OrderedMap{keys: ["a"], map: %{"a" => 1}}
+    assert Text.parse_data_file("{ \"a\": 0xa }") == %OrderedMap{keys: ["a"], map: %{"a" => 10}}
+    assert Text.parse_data_file("{ \"a\": 0xb }") == %OrderedMap{keys: ["a"], map: %{"a" => 11}}
+    assert Text.parse_data_file("{ \"a\": 0xc }") == %OrderedMap{keys: ["a"], map: %{"a" => 12}}
+    assert Text.parse_data_file("{ \"a\": 0xd }") == %OrderedMap{keys: ["a"], map: %{"a" => 13}}
+    assert Text.parse_data_file("{ \"a\": 0xe }") == %OrderedMap{keys: ["a"], map: %{"a" => 14}}
+    assert Text.parse_data_file("{ \"a\": 0xfa }") == %OrderedMap{keys: ["a"], map: %{"a" => 250}}
+    assert Text.parse_data_file("{ \"a\": 0xfb }") == %OrderedMap{keys: ["a"], map: %{"a" => 251}}
+    assert Text.parse_data_file("{ \"a\": 0xfc }") == %OrderedMap{keys: ["a"], map: %{"a" => 252}}
+    assert Text.parse_data_file("{ \"a\": 0xfd }") == %OrderedMap{keys: ["a"], map: %{"a" => 253}}
+    assert Text.parse_data_file("{ \"a\": 0xfe }") == %OrderedMap{keys: ["a"], map: %{"a" => 254}}
+
+    assert Text.parse_data_file("{ \"a\": '\\\"\\/\\'\\b\\f\\n\\r\\t\\\\' }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "\"/'\b\f\n\r\t\\"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": '\\\"\\/\\'\\b\\f\\n\\r\\t\\\\' }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "\"/'\b\f\n\r\t\\"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u263A\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "☺"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u0000\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => <<0>>}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u1111\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "ᄑ"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u2222\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "∢"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u3333\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "㌳"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u4444\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "䑄"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u5555\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "啕"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u6666\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "晦"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u7777\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "睷"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u8888\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "袈"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\u9999\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "香"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\uaaaa\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "ꪪ"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\ubbbb\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "뮻"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\ucccc\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "쳌"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\udddd\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => <<0xDD, 0xDD>>}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\ueeee\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => <<0xEE, 0xEE>>}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\uffff\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => <<0xFF, 0xFF>>}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\uAAAA\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "ꪪ"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\uBBBB\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "뮻"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\uCCCC\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "쳌"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\uDDDD\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => <<0xDD, 0xDD>>}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\uEEEE\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => <<0xEE, 0xEE>>}
+           }
+
+    assert Text.parse_data_file("{ \"a\": \"\\uFFFF\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => <<0xFF, 0xFF>>}
+           }
+
+    assert Text.parse_data_file("{ \"a\": /**/ \"1\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "1"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": /* */ \"1\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "1"}
+           }
+
+    assert Text.parse_data_file("{ \"a\": /*\n*/ \"1\" }") == %OrderedMap{
+             keys: ["a"],
+             map: %{"a" => "1"}
+           }
   end
 
   test "error handling in parseLibraryFile" do
@@ -146,7 +368,10 @@ defmodule RfwFormats.TextTest do
     widget = hd(result.widgets)
     assert widget.name == "a"
     assert %Model.ConstructorCall{name: "b", arguments: args} = widget.root
-    assert %{"c" => [%Model.Loop{input: input, output: output}]} = args
+
+    assert %OrderedMap{keys: ["c"], map: %{"c" => [%Model.Loop{input: input, output: output}]}} =
+             args
+
     assert input == []
     assert output == "e"
   end
@@ -158,161 +383,326 @@ defmodule RfwFormats.TextTest do
     assert widget.name == "a"
     assert %Model.Switch{input: input, outputs: outputs} = widget.root
     assert input == 0
-    assert %{0 => %Model.ConstructorCall{name: "a", arguments: %{}}} = outputs
+
+    assert %OrderedMap{
+             keys: [0],
+             map: %{
+               0 => %Model.ConstructorCall{
+                 name: "a",
+                 arguments: %OrderedMap{keys: [], map: %{}}
+               }
+             }
+           } = outputs
 
     result = Text.parse_library_file("widget a = switch 0 { default: a() };")
     widget = hd(result.widgets)
 
-    assert %Model.Switch{outputs: %{nil => %Model.ConstructorCall{name: "a", arguments: %{}}}} =
+    assert %Model.Switch{
+             outputs: %OrderedMap{
+               keys: [nil],
+               map: %{
+                 nil => %Model.ConstructorCall{
+                   name: "a",
+                   arguments: %OrderedMap{keys: [], map: %{}}
+                 }
+               }
+             }
+           } =
              widget.root
 
     result = Text.parse_library_file("widget a = b(c: switch 1 { 2: 3 });")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => switch}} = widget.root
-    assert %Model.Switch{input: 1, outputs: %{2 => 3}} = switch
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => switch}}
+           } = widget.root
+
+    assert %Model.Switch{input: 1, outputs: %OrderedMap{keys: [2], map: %{2 => 3}}} = switch
   end
 
   test "parseLibraryFile: references" do
     result = Text.parse_library_file("widget a = b(c:data.11234567890.\"e\");")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => data_ref}}
+           } = widget.root
+
     assert %Model.DataReference{parts: [11_234_567_890, "e"]} = data_ref
 
     result = Text.parse_library_file("widget a = b(c: [...for d in []: d]);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => [loop]}}
+           } = widget.root
+
     assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: []}} = loop
 
     result = Text.parse_library_file("widget a = b(c:args.foo.bar);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => args_ref}}
+           } = widget.root
+
     assert %Model.ArgsReference{parts: ["foo", "bar"]} = args_ref
 
     result = Text.parse_library_file("widget a = b(c:data.foo.bar);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => data_ref}}
+           } = widget.root
+
     assert %Model.DataReference{parts: ["foo", "bar"]} = data_ref
 
     result = Text.parse_library_file("widget a = b(c:state.foo.bar);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => state_ref}}
+           } = widget.root
+
     assert %Model.StateReference{parts: ["foo", "bar"]} = state_ref
 
     result = Text.parse_library_file("widget a = b(c: [...for d in []: d.bar]);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => [loop]}}
+           } = widget.root
+
     assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: ["bar"]}} = loop
 
     result = Text.parse_library_file("widget a = b(c:args.foo.\"bar\");")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => args_ref}}
+           } = widget.root
+
     assert %Model.ArgsReference{parts: ["foo", "bar"]} = args_ref
 
     result = Text.parse_library_file("widget a = b(c:data.foo.\"bar\");")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => data_ref}}
+           } = widget.root
+
     assert %Model.DataReference{parts: ["foo", "bar"]} = data_ref
 
     result = Text.parse_library_file("widget a = b(c:state.foo.\"bar\");")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => state_ref}}
+           } = widget.root
+
     assert %Model.StateReference{parts: ["foo", "bar"]} = state_ref
 
     result = Text.parse_library_file("widget a = b(c: [...for d in []: d.\"bar\"]);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => [loop]}}
+           } = widget.root
+
     assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: ["bar"]}} = loop
 
     result = Text.parse_library_file("widget a = b(c:args.foo.9);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => args_ref}}
+           } = widget.root
+
     assert %Model.ArgsReference{parts: ["foo", 9]} = args_ref
 
     result = Text.parse_library_file("widget a = b(c:data.foo.9);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => data_ref}}
+           } = widget.root
+
     assert %Model.DataReference{parts: ["foo", 9]} = data_ref
 
     result = Text.parse_library_file("widget a = b(c:state.foo.9);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => state_ref}}
+           } = widget.root
+
     assert %Model.StateReference{parts: ["foo", 9]} = state_ref
 
     result = Text.parse_library_file("widget a = b(c: [...for d in []: d.9]);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => [loop]}}
+           } = widget.root
+
     assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: [9]}} = loop
 
     result = Text.parse_library_file("widget a = b(c:args.foo.12);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => args_ref}}
+           } = widget.root
+
     assert %Model.ArgsReference{parts: ["foo", 12]} = args_ref
 
     result = Text.parse_library_file("widget a = b(c:data.foo.12);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => data_ref}}
+           } = widget.root
+
     assert %Model.DataReference{parts: ["foo", 12]} = data_ref
 
     result = Text.parse_library_file("widget a = b(c:state.foo.12);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => state_ref}}
+           } = widget.root
+
     assert %Model.StateReference{parts: ["foo", 12]} = state_ref
 
     result = Text.parse_library_file("widget a = b(c: [...for d in []: d.12]);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => [loop]}}
+           } = widget.root
+
     assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: [12]}} = loop
 
     result = Text.parse_library_file("widget a = b(c:args.foo.98);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => args_ref}}
+           } = widget.root
+
     assert %Model.ArgsReference{parts: ["foo", 98]} = args_ref
 
     result = Text.parse_library_file("widget a = b(c:data.foo.98);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => data_ref}}
+           } = widget.root
+
     assert %Model.DataReference{parts: ["foo", 98]} = data_ref
 
     result = Text.parse_library_file("widget a = b(c:state.foo.98);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => state_ref}}
+           } = widget.root
+
     assert %Model.StateReference{parts: ["foo", 98]} = state_ref
 
     result = Text.parse_library_file("widget a = b(c: [...for d in []: d.98]);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => [loop]}}
+           } = widget.root
+
     assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: [98]}} = loop
 
     result = Text.parse_library_file("widget a = b(c:args.foo.000);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => args_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => args_ref}}
+           } = widget.root
+
     assert %Model.ArgsReference{parts: ["foo", 0]} = args_ref
 
     result = Text.parse_library_file("widget a = b(c:data.foo.000);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => data_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => data_ref}}
+           } = widget.root
+
     assert %Model.DataReference{parts: ["foo", 0]} = data_ref
 
     result = Text.parse_library_file("widget a = b(c:state.foo.000);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => state_ref}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => state_ref}}
+           } = widget.root
+
     assert %Model.StateReference{parts: ["foo", 0]} = state_ref
 
     result = Text.parse_library_file("widget a = b(c: [...for d in []: d.000]);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => [loop]}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => [loop]}}
+           } = widget.root
+
     assert %Model.Loop{input: [], output: %Model.LoopReference{loop: 0, parts: [0]}} = loop
   end
 
   test "parseLibraryFile: event handlers" do
     result = Text.parse_library_file("widget a = b(c: event \"d\" { });")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => event}} = widget.root
-    assert %Model.EventHandler{event_name: "d", event_arguments: %{}} = event
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => event}}
+           } = widget.root
+
+    assert %Model.EventHandler{event_name: "d", event_arguments: %OrderedMap{keys: [], map: %{}}} =
+             event
 
     result = Text.parse_library_file("widget a = b(c: set state.d = 0);")
     widget = hd(result.widgets)
-    assert %Model.ConstructorCall{name: "b", arguments: %{"c" => set_state}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "b",
+             arguments: %OrderedMap{keys: ["c"], map: %{"c" => set_state}}
+           } = widget.root
+
     assert %Model.SetStateHandler{state_reference: state_ref, value: 0} = set_state
     assert %Model.StateReference{parts: ["d"]} = state_ref
   end
@@ -321,13 +711,13 @@ defmodule RfwFormats.TextTest do
     result = Text.parse_library_file("widget a {} = c();")
     widget = hd(result.widgets)
     assert widget.name == "a"
-    assert widget.initial_state == %{}
+    assert widget.initial_state == %OrderedMap{keys: [], map: %{}}
     assert %Model.ConstructorCall{name: "c", arguments: %{}} = widget.root
 
     result = Text.parse_library_file("widget a {b: 0} = c();")
     widget = hd(result.widgets)
     assert widget.name == "a"
-    assert widget.initial_state == %{"b" => 0}
+    assert widget.initial_state == %OrderedMap{keys: ["b"], map: %{"b" => 0}}
     assert %Model.ConstructorCall{name: "c", arguments: %{}} = widget.root
   end
 
@@ -340,11 +730,16 @@ defmodule RfwFormats.TextTest do
     widget = hd(result.widgets)
     assert widget.name == "a"
 
-    assert %Model.ConstructorCall{name: "Builder", arguments: %{"builder" => builder}} =
+    assert %Model.ConstructorCall{
+             name: "Builder",
+             arguments: %OrderedMap{keys: ["builder"], map: %{"builder" => builder}}
+           } =
              widget.root
 
     assert %Model.WidgetBuilderDeclaration{argument_name: "scope", widget: container} = builder
-    assert %Model.ConstructorCall{name: "Container", arguments: %{}} = container
+
+    assert %Model.ConstructorCall{name: "Container", arguments: %OrderedMap{keys: [], map: %{}}} =
+             container
   end
 
   test "parseLibraryFile: widgetBuilders work with arguments" do
@@ -356,12 +751,18 @@ defmodule RfwFormats.TextTest do
     widget = hd(result.widgets)
     assert widget.name == "a"
 
-    assert %Model.ConstructorCall{name: "Builder", arguments: %{"builder" => builder}} =
+    assert %Model.ConstructorCall{
+             name: "Builder",
+             arguments: %OrderedMap{keys: ["builder"], map: %{"builder" => builder}}
+           } =
              widget.root
 
     assert %Model.WidgetBuilderDeclaration{argument_name: "scope", widget: container} = builder
 
-    assert %Model.ConstructorCall{name: "Container", arguments: %{"width" => width_ref}} =
+    assert %Model.ConstructorCall{
+             name: "Container",
+             arguments: %OrderedMap{keys: ["width"], map: %{"width" => width_ref}}
+           } =
              container
 
     assert %Model.WidgetBuilderArgReference{argument_name: "scope", parts: ["width"]} =
@@ -507,9 +908,22 @@ defmodule RfwFormats.TextTest do
 
     widget = hd(result.widgets)
     assert widget.name == "a"
-    assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
+
+    assert %Model.ConstructorCall{
+             name: "A",
+             arguments: %OrderedMap{keys: ["b"], map: %{"b" => builder}}
+           } = widget.root
+
     assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder
-    assert %Model.ConstructorCall{name: "B", arguments: %{"c" => %{"d" => d_ref}}} = b_call
+
+    assert %Model.ConstructorCall{
+             name: "B",
+             arguments: %OrderedMap{
+               keys: ["c"],
+               map: %{"c" => %OrderedMap{keys: ["d"], map: %{"d" => d_ref}}}
+             }
+           } = b_call
+
     assert %Model.WidgetBuilderArgReference{argument_name: "s1", parts: ["d"]} = d_ref
   end
 
@@ -523,7 +937,7 @@ defmodule RfwFormats.TextTest do
 
     widget = hd(result.widgets)
     assert widget.name == "a"
-    assert widget.initial_state == %{"foo" => 0}
+    assert widget.initial_state == %OrderedMap{keys: ["foo"], map: %{"foo" => 0}}
     assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
     assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder
     assert %Model.ConstructorCall{name: "B", arguments: %{"onTap" => setter}} = b_call
@@ -544,21 +958,35 @@ defmodule RfwFormats.TextTest do
 
     widget = hd(result.widgets)
     assert widget.name == "a"
-    assert widget.initial_state == %{"foo" => 0}
-    assert %Model.ConstructorCall{name: "A", arguments: %{"b" => builder}} = widget.root
+    assert widget.initial_state == %OrderedMap{keys: ["foo"], map: %{"foo" => 0}}
+
+    assert %Model.ConstructorCall{
+             name: "A",
+             arguments: %OrderedMap{keys: ["b"], map: %{"b" => builder}}
+           } = widget.root
+
     assert %Model.WidgetBuilderDeclaration{argument_name: "s1", widget: b_call} = builder
-    assert %Model.ConstructorCall{name: "B", arguments: %{"onTap" => event_handler}} = b_call
+
+    assert %Model.ConstructorCall{
+             name: "B",
+             arguments: %OrderedMap{keys: ["onTap"], map: %{"onTap" => event_handler}}
+           } = b_call
 
     assert %Model.EventHandler{
              event_name: "foo",
-             event_arguments: %{
-               "result" => %Model.WidgetBuilderArgReference{
-                 argument_name: "s1",
-                 parts: ["result"]
+             event_arguments: %OrderedMap{
+               keys: ["result"],
+               map: %{
+                 "result" => %Model.WidgetBuilderArgReference{
+                   argument_name: "s1",
+                   parts: ["result"]
+                 }
                }
              }
            } = event_handler
   end
+
+  # ... [other tests unchanged until complex nested structures] ...
 
   test "parseLibraryFile: complex nested structures" do
     result =
@@ -596,18 +1024,24 @@ defmodule RfwFormats.TextTest do
     widget = hd(result.widgets)
     assert widget.name == "complexWidget"
 
-    assert %Model.ConstructorCall{name: "Column", arguments: %{"children" => children}} =
+    assert %Model.ConstructorCall{
+             name: "Column",
+             arguments: %OrderedMap{keys: ["children"], map: %{"children" => children}}
+           } =
              widget.root
 
     [header, loop, builder] = children
 
-    assert %Model.ConstructorCall{name: "Text", arguments: %{"text" => "Header"}} = header
+    assert %Model.ConstructorCall{
+             name: "Text",
+             arguments: %OrderedMap{keys: ["text"], map: %{"text" => "Header"}}
+           } = header
 
     assert %Model.Loop{
              input: %Model.DataReference{parts: ["items"]},
              output: %Model.ConstructorCall{
                name: "Row",
-               arguments: %{"children" => row_children}
+               arguments: %OrderedMap{keys: ["children"], map: %{"children" => row_children}}
              }
            } = loop
 
@@ -615,58 +1049,79 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.ConstructorCall{
              name: "Text",
-             arguments: %{"text" => ["Item: ", %Model.LoopReference{loop: 0, parts: ["name"]}]}
+             arguments: %OrderedMap{
+               keys: ["text"],
+               map: %{"text" => ["Item: ", %Model.LoopReference{loop: 0, parts: ["name"]}]}
+             }
            } = name_text
 
     assert %Model.Switch{
              input: %Model.LoopReference{loop: 0, parts: ["type"]},
-             outputs: %{
-               "button" => %Model.ConstructorCall{
-                 name: "Button",
-                 arguments: %{
-                   "onPressed" => %Model.EventHandler{
-                     event_name: "buttonPressed",
-                     event_arguments: %{
-                       "id" => %Model.LoopReference{loop: 0, parts: ["id"]}
+             outputs: %OrderedMap{
+               keys: ["button", "checkbox", nil],
+               map: %{
+                 "button" => %Model.ConstructorCall{
+                   name: "Button",
+                   arguments: %OrderedMap{
+                     keys: ["onPressed", "child"],
+                     map: %{
+                       "onPressed" => %Model.EventHandler{
+                         event_name: "buttonPressed",
+                         event_arguments: %OrderedMap{
+                           keys: ["id"],
+                           map: %{
+                             "id" => %Model.LoopReference{loop: 0, parts: ["id"]}
+                           }
+                         }
+                       },
+                       "child" => %Model.ConstructorCall{
+                         name: "Text",
+                         arguments: %OrderedMap{keys: ["text"], map: %{"text" => "Press me"}}
+                       }
                      }
-                   },
-                   "child" => %Model.ConstructorCall{
-                     name: "Text",
-                     arguments: %{"text" => "Press me"}
                    }
-                 }
-               },
-               "checkbox" => %Model.ConstructorCall{
-                 name: "Checkbox",
-                 arguments: %{
-                   "value" => %Model.StateReference{parts: ["value"]},
-                   "onChanged" => %Model.SetStateHandler{
-                     state_reference: %Model.StateReference{parts: ["values"]},
-                     value: %Model.LoopReference{loop: 0, parts: ["id"]}
+                 },
+                 "checkbox" => %Model.ConstructorCall{
+                   name: "Checkbox",
+                   arguments: %OrderedMap{
+                     keys: ["value", "onChanged"],
+                     map: %{
+                       "value" => %Model.StateReference{parts: ["value"]},
+                       "onChanged" => %Model.SetStateHandler{
+                         state_reference: %Model.StateReference{parts: ["values"]},
+                         value: %Model.LoopReference{loop: 0, parts: ["id"]}
+                       }
+                     }
                    }
+                 },
+                 nil => %Model.ConstructorCall{
+                   name: "Text",
+                   arguments: %OrderedMap{keys: ["text"], map: %{"text" => "Unknown type"}}
                  }
-               },
-               nil => %Model.ConstructorCall{
-                 name: "Text",
-                 arguments: %{"text" => "Unknown type"}
                }
              }
            } = switch
 
-    assert %Model.ConstructorCall{name: "Builder", arguments: %{"builder" => builder_decl}} =
+    assert %Model.ConstructorCall{
+             name: "Builder",
+             arguments: %OrderedMap{keys: ["builder"], map: %{"builder" => builder_decl}}
+           } =
              builder
 
     assert %Model.WidgetBuilderDeclaration{
              argument_name: "context",
              widget: %Model.ConstructorCall{
                name: "Text",
-               arguments: %{
-                 "text" => [
-                   %Model.WidgetBuilderArgReference{
-                     argument_name: "context",
-                     parts: ["itemCount"]
-                   }
-                 ]
+               arguments: %OrderedMap{
+                 keys: ["text"],
+                 map: %{
+                   "text" => [
+                     %Model.WidgetBuilderArgReference{
+                       argument_name: "context",
+                       parts: ["itemCount"]
+                     }
+                   ]
+                 }
                }
              }
            } = builder_decl
@@ -754,20 +1209,20 @@ defmodule RfwFormats.TextTest do
 
   test "parseLibraryFile: nested builders and references" do
     template = """
-      import core;
-      import local;
+    import core;
+    import local;
 
-      widget test = Sum(
-        operand1: 1,
-        operand2: 2,
-        builder: (result1) => IntToString(
-          value: result1.result,
-          builder: (result2) => Text(
-            text: ['1 + 2 = ', result2.result],
-            textDirection: 'ltr'
-          ),
+    widget test = Sum(
+      operand1: 1,
+      operand2: 2,
+      builder: (result1) => IntToString(
+        value: result1.result,
+        builder: (result2) => Text(
+          text: ['1 + 2 = ', result2.result],
+          textDirection: 'ltr'
         ),
-      );
+      ),
+    );
     """
 
     result = Text.parse_library_file(template)
@@ -776,10 +1231,13 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.ConstructorCall{
              name: "Sum",
-             arguments: %{
-               "operand1" => 1,
-               "operand2" => 2,
-               "builder" => sum_builder
+             arguments: %OrderedMap{
+               keys: ["operand1", "operand2", "builder"],
+               map: %{
+                 "operand1" => 1,
+                 "operand2" => 2,
+                 "builder" => sum_builder
+               }
              }
            } = widget.root
 
@@ -790,12 +1248,15 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.ConstructorCall{
              name: "IntToString",
-             arguments: %{
-               "value" => %Model.WidgetBuilderArgReference{
-                 argument_name: "result1",
-                 parts: ["result"]
-               },
-               "builder" => int_to_string_builder
+             arguments: %OrderedMap{
+               keys: ["value", "builder"],
+               map: %{
+                 "value" => %Model.WidgetBuilderArgReference{
+                   argument_name: "result1",
+                   parts: ["result"]
+                 },
+                 "builder" => int_to_string_builder
+               }
              }
            } = int_to_string_call
 
@@ -806,15 +1267,18 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.ConstructorCall{
              name: "Text",
-             arguments: %{
-               "text" => [
-                 "1 + 2 = ",
-                 %Model.WidgetBuilderArgReference{
-                   argument_name: "result2",
-                   parts: ["result"]
-                 }
-               ],
-               "textDirection" => "ltr"
+             arguments: %OrderedMap{
+               keys: ["text", "textDirection"],
+               map: %{
+                 "text" => [
+                   "1 + 2 = ",
+                   %Model.WidgetBuilderArgReference{
+                     argument_name: "result2",
+                     parts: ["result"]
+                   }
+                 ],
+                 "textDirection" => "ltr"
+               }
              }
            } = text_call
   end
@@ -847,13 +1311,16 @@ defmodule RfwFormats.TextTest do
     root_widget = Enum.find(widgets, fn widget -> widget.name == "root" end)
 
     assert verify_widget != nil
-    assert verify_widget.initial_state == %{"state" => 0x00}
+    assert verify_widget.initial_state == %OrderedMap{keys: ["state"], map: %{"state" => 0x00}}
 
     assert %Model.ConstructorCall{
              name: "GestureDetector",
-             arguments: %{
-               "onTap" => on_tap,
-               "child" => child
+             arguments: %OrderedMap{
+               keys: ["onTap", "child"],
+               map: %{
+                 "onTap" => on_tap,
+                 "child" => child
+               }
              }
            } = verify_widget.root
 
@@ -864,16 +1331,22 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.ConstructorCall{
              name: "ColoredBox",
-             arguments: %{
-               "color" => color_switch
+             arguments: %OrderedMap{
+               keys: ["color"],
+               map: %{
+                 "color" => color_switch
+               }
              }
            } = child
 
     assert %Model.Switch{
              input: %Model.StateReference{parts: ["state"]},
-             outputs: %{
-               0x00 => 0xFF000001,
-               0xEE => 0xFF000002
+             outputs: %OrderedMap{
+               keys: [0x00, 0xEE],
+               map: %{
+                 0x00 => 0xFF000001,
+                 0xEE => 0xFF000002
+               }
              }
            } = color_switch
 
@@ -881,8 +1354,11 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.ConstructorCall{
              name: "SizedBox",
-             arguments: %{
-               "child" => child_arg
+             arguments: %OrderedMap{
+               keys: ["child"],
+               map: %{
+                 "child" => child_arg
+               }
              }
            } = remote_widget.root
 
@@ -891,8 +1367,11 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.ConstructorCall{
              name: "remote",
-             arguments: %{
-               "corn" => corn_value
+             arguments: %OrderedMap{
+               keys: ["corn"],
+               map: %{
+                 "corn" => corn_value
+               }
              }
            } = root_widget.root
 
@@ -905,8 +1384,11 @@ defmodule RfwFormats.TextTest do
 
     assert %Model.ConstructorCall{
              name: "verify",
-             arguments: %{
-               "value" => %Model.LoopReference{loop: 0}
+             arguments: %OrderedMap{
+               keys: ["value"],
+               map: %{
+                 "value" => %Model.LoopReference{loop: 0}
+               }
              }
            } = verify_call
   end
