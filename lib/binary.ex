@@ -3,8 +3,7 @@ defmodule RfwFormats.Binary do
   Provides functions to encode and decode Remote Flutter Widgets data and library blobs.
   """
 
-  alias RfwFormats.Model
-  alias RfwFormats.OrderedMap
+  alias RfwFormats.{Model, OrderedMap}
 
   alias Model.{
     RemoteWidgetLibrary,

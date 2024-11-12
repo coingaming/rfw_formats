@@ -5,8 +5,7 @@ defmodule RfwFormats.Text do
 
   import NimbleParsec
 
-  alias RfwFormats.Model
-  alias RfwFormats.OrderedMap
+  alias RfwFormats.{Model, OrderedMap}
 
   @reserved_words ~w(args data event false set state true)
 
@@ -158,7 +157,6 @@ defmodule RfwFormats.Text do
   value =
     choice([
       boolean,
-      null_literal,
       integer,
       float,
       string_literal,
@@ -220,7 +218,8 @@ defmodule RfwFormats.Text do
         |> ignore(whitespace)
         |> ignore(string(":"))
         |> ignore(whitespace)
-        |> parsec(:value)
+        # Allow null only in map entries
+        |> choice([parsec(:value), null_literal])
         |> repeat(
           ignore(whitespace)
           |> ignore(string(","))
@@ -229,7 +228,8 @@ defmodule RfwFormats.Text do
           |> ignore(whitespace)
           |> ignore(string(":"))
           |> ignore(whitespace)
-          |> parsec(:value)
+          # Allow null only in map entries
+          |> choice([parsec(:value), null_literal])
         )
         |> optional(
           ignore(whitespace)
@@ -375,6 +375,7 @@ defmodule RfwFormats.Text do
         |> ignore(whitespace)
         |> ignore(string(":"))
         |> ignore(whitespace)
+        |> lookahead_not(string("null"))
         |> parsec(:value)
         |> wrap()
         |> ignore(whitespace)
