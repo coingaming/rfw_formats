@@ -364,8 +364,15 @@ defmodule RfwFormats.Binary do
        }) do
     encoder
     |> write_string(name)
-    |> write_map(initial_state || OrderedMap.new(), tagged: false)
+    |> write_initial_state(initial_state)
     |> write_value(root)
+  end
+
+  defp write_initial_state(encoder, initial_state) do
+    case initial_state do
+      nil -> write_map(encoder, OrderedMap.new(), tagged: false)
+      map -> write_map(encoder, map, tagged: false)
+    end
   end
 
   defp write_import(encoder, %Import{name: %Model.LibraryName{parts: parts}}) do

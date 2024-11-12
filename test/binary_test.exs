@@ -3,7 +3,7 @@ defmodule RfwFormats.BinaryTest do
 
   use ExUnit.Case
 
-  alias RfwFormats.{Text, Binary, Model, OrderedMap}
+  alias RfwFormats.{Binary, Model, OrderedMap}
 
   # This is a number that requires more than 32 bits but less than 53 bits,
   # so that it works in a JS Number and tests the logic that parses 64-bit ints as

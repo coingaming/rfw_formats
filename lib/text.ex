@@ -515,14 +515,14 @@ defmodule RfwFormats.Text do
     initial_state =
       case initial_state_list do
         [state] -> state
-        nil -> OrderedMap.new()
+        nil -> nil
       end
 
     [name, initial_state, root]
   end
 
   defp assemble_widget_declaration_args([name, root]) do
-    [name, OrderedMap.new(), root]
+    [name, nil, root]
   end
 
   widget_builder =
