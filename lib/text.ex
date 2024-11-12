@@ -157,6 +157,7 @@ defmodule RfwFormats.Text do
   value =
     choice([
       boolean,
+      null_literal,
       integer,
       float,
       string_literal,
@@ -179,11 +180,13 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> wrap(
       optional(
-        parsec(:value)
+        lookahead_not(string("null"))
+        |> parsec(:value)
         |> repeat(
           ignore(whitespace)
           |> ignore(string(","))
           |> ignore(whitespace)
+          |> lookahead_not(string("null"))
           |> parsec(:value)
         )
         |> optional(
@@ -195,19 +198,7 @@ defmodule RfwFormats.Text do
     )
     |> ignore(whitespace)
     |> ignore(string("]"))
-    |> map({:wrap_list_values, []})
     |> label("list")
-
-  defp wrap_list_values(value) do
-    result =
-      case value do
-        nil -> []
-        values when is_list(values) -> values
-        other -> [other]
-      end
-
-    result
-  end
 
   map =
     ignore(string("{"))
@@ -218,8 +209,7 @@ defmodule RfwFormats.Text do
         |> ignore(whitespace)
         |> ignore(string(":"))
         |> ignore(whitespace)
-        # Allow null only in map entries
-        |> choice([parsec(:value), null_literal])
+        |> parsec(:value)
         |> repeat(
           ignore(whitespace)
           |> ignore(string(","))
@@ -228,8 +218,7 @@ defmodule RfwFormats.Text do
           |> ignore(whitespace)
           |> ignore(string(":"))
           |> ignore(whitespace)
-          # Allow null only in map entries
-          |> choice([parsec(:value), null_literal])
+          |> parsec(:value)
         )
         |> optional(
           ignore(whitespace)
@@ -294,9 +283,11 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("in"))
     |> ignore(whitespace)
+    |> lookahead_not(string("null"))
     |> tag(parsec(:value), :input)
     |> ignore(string(":"))
     |> ignore(whitespace)
+    |> lookahead_not(string("null"))
     |> tag(parsec(:value), :output)
     |> post_traverse({:pop_loop_var, []})
     |> wrap()
@@ -361,6 +352,7 @@ defmodule RfwFormats.Text do
   switch =
     ignore(string("switch"))
     |> ignore(whitespace)
+    |> lookahead_not(string("null"))
     |> unwrap_and_tag(parsec(:value), :input)
     |> ignore(whitespace)
     |> ignore(string("{"))
@@ -451,6 +443,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("="))
     |> ignore(whitespace)
+    |> lookahead_not(string("null"))
     |> parsec(:value)
     |> wrap()
     |> map({:create_set_state_handler, []})
@@ -535,6 +528,7 @@ defmodule RfwFormats.Text do
     |> ignore(whitespace)
     |> ignore(string("=>"))
     |> ignore(whitespace)
+    |> lookahead_not(string("null"))
     |> parsec(:value)
     |> post_traverse({:validate_widget_builder_value, []})
     |> post_traverse({:pop_widget_arg, []})
@@ -608,6 +602,7 @@ defmodule RfwFormats.Text do
     identifier
     |> ignore(string(":"))
     |> ignore(whitespace)
+    |> lookahead_not(string("null"))
     |> parsec(:value)
     |> wrap()
     |> ignore(whitespace)
