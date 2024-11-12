@@ -1,5 +1,6 @@
 defmodule RfwFormats.OrderedMapTest do
   use ExUnit.Case
+
   alias RfwFormats.OrderedMap
 
   test "new/0 creates an empty OrderedMap" do

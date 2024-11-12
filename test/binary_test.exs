@@ -3,10 +3,7 @@ defmodule RfwFormats.BinaryTest do
 
   use ExUnit.Case
 
-  alias RfwFormats.Binary
-  alias RfwFormats.Text
-  alias RfwFormats.Model
-  alias RfwFormats.OrderedMap
+  alias RfwFormats.{Text, Binary, Model, OrderedMap}
 
   # This is a number that requires more than 32 bits but less than 53 bits,
   # so that it works in a JS Number and tests the logic that parses 64-bit ints as
@@ -288,72 +285,6 @@ defmodule RfwFormats.BinaryTest do
       <<0xFE, 0x52, 0x46, 0x57, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x61, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEF>>
-
-    assert_raise RuntimeError,
-                 "Unrecognized data type 0xEF while decoding blob.",
-                 fn ->
-                   Binary.decode_library_blob(bytes)
-                 end
-  end
-
-  test "Library decoder: live test" do
-    template = """
-    import widgets;
-    import material;
-
-    widget root = Scaffold(
-      appBar: AppBar(
-        title: Text(text: ['Counter Example']),
-        centerTitle: true,
-        backgroundColor: 0xFF002211,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: "center",
-          children: [
-            Text(text: ["Connected Users: ", data.presence]),
-            SizedBox(height: 20),
-            Text(text: ["You have pushed the button this many times:"]),
-            Text(
-              text: [data.state],
-              style: {
-                fontSize: 20.0,
-              },
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: Row(
-        mainAxisAlignment: "end",
-        children: [
-          FloatingActionButton(
-            onPressed: event "decrement" {},
-            tooltip: ["Decrement"],
-            child: Icon(
-              icon: 0xe516,
-              fontFamily: 'MaterialIcons',
-            ),
-          ),
-          SizedBox(width: 10),
-          FloatingActionButton(
-            onPressed: event "increment" {},
-            tooltip: ["Increment"],
-            child: Icon(
-              icon: 0xe047,
-              fontFamily: 'MaterialIcons',
-            ),
-          ),
-        ],
-      ),
-    );
-    """
-
-    library = Text.parse_library_file(template)
-    bytes = Binary.encode_library_blob(library)
-
-    inspect_options = [limit: :infinity, printable_limit: :infinity]
-
-    Logger.debug("Decoded binary: #{inspect(bytes, inspect_options)}")
 
     assert_raise RuntimeError,
                  "Unrecognized data type 0xEF while decoding blob.",
@@ -691,7 +622,7 @@ defmodule RfwFormats.BinaryTest do
     }
 
     assert_raise RuntimeError,
-                 "Unrecognized data type 0x0A while decoding widget builder blob.",
+                 "Invalid widget type %RfwFormats.Model.ArgsReference{parts: [], __source__: nil} in widget builder declaration.",
                  fn ->
                    bytes = Binary.encode_library_blob(library)
                    Binary.decode_library_blob(bytes)

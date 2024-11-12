@@ -1,8 +1,7 @@
 defmodule RfwFormats.TextTest do
   use ExUnit.Case
-  alias RfwFormats.Text
-  alias RfwFormats.Model
-  alias RfwFormats.OrderedMap
+
+  alias RfwFormats.{Text, Model, OrderedMap}
 
   test "empty parseDataFile" do
     result = Text.parse_data_file("{}")

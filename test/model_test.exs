@@ -1,5 +1,6 @@
 defmodule RfwFormats.ModelTest do
   use ExUnit.Case
+
   alias RfwFormats.Model
 
   test "LibraryName" do

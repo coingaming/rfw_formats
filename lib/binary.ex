@@ -515,8 +515,8 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_reference(decoder) do
-    with {:ok, {parts, decoder}} <- read_list(decoder) do
-      {:ok, {parts, decoder}}
+    with {:ok, {length, decoder}} <- read_int64(decoder) do
+      read_n_values(decoder, length, [])
     end
   end
 
@@ -547,7 +547,7 @@ defmodule RfwFormats.Binary do
 
   defp read_event_handler(decoder) do
     with {:ok, {name, decoder}} <- read_string(decoder),
-         {:ok, {arguments, decoder}} <- read_value(decoder) do
+         {:ok, {arguments, decoder}} <- read_constructor_arguments(decoder) do
       {:ok, {%EventHandler{event_name: name, event_arguments: arguments}, decoder}}
     end
   end
@@ -601,22 +601,18 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_widget_builder_declaration(decoder) do
-    with {:ok, {arg_name, decoder1}} <- read_string(decoder),
-         {:ok, {type, decoder2}} <- read_byte(decoder1) do
-      case type do
-        @ms_widget ->
-          with {:ok, {widget, decoder3}} <- read_constructor_call(decoder2) do
-            {:ok, {%WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder3}}
-          end
+    with {:ok, {arg_name, decoder}} <- read_string(decoder),
+         {:ok, {widget, decoder}} <- read_value(decoder) do
+      case widget do
+        %ConstructorCall{} ->
+          {:ok, {%WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder}}
 
-        @ms_switch ->
-          with {:ok, {widget, decoder3}} <- read_switch(decoder2) do
-            {:ok, {%WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder3}}
-          end
+        %Switch{} ->
+          {:ok, {%WidgetBuilderDeclaration{argument_name: arg_name, widget: widget}, decoder}}
 
         _ ->
           raise RuntimeError,
-                "Unrecognized data type 0x#{Integer.to_string(type, 16) |> String.pad_leading(2, "0")} while decoding widget builder blob."
+                "Invalid widget type #{inspect(widget)} in widget builder declaration."
       end
     end
   end
@@ -653,9 +649,18 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_import(decoder) do
-    with {:ok, {_parts, decoder}} <- read_int64(decoder),
-         {:ok, {name, decoder}} <- read_string(decoder) do
-      {:ok, {%Import{name: %Model.LibraryName{parts: [name]}}, decoder}}
+    with {:ok, {num_parts, decoder}} <- read_int64(decoder) do
+      read_n_import_parts(decoder, num_parts, [])
+    end
+  end
+
+  defp read_n_import_parts(decoder, 0, acc) do
+    {:ok, {%Import{name: %Model.LibraryName{parts: Enum.reverse(acc)}}, decoder}}
+  end
+
+  defp read_n_import_parts(decoder, n, acc) when n > 0 do
+    with {:ok, {part, decoder}} <- read_string(decoder) do
+      read_n_import_parts(decoder, n - 1, [part | acc])
     end
   end
 
