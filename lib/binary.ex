@@ -284,7 +284,8 @@ defmodule RfwFormats.Binary do
 
   defp write_set_state_handler(encoder, %SetStateHandler{state_reference: ref, value: value}) do
     [encoder, [@ms_set_state]]
-    |> write_value(ref)
+    # Write parts directly without StateReference tag
+    |> write_parts(ref.parts)
     |> write_value(value)
   end
 
@@ -596,13 +597,13 @@ defmodule RfwFormats.Binary do
   end
 
   defp read_set_state_handler(decoder) do
-    with {:ok, {state_reference, decoder1}} <- read_value(decoder),
-         {:ok, {value, decoder2}} <- read_value(decoder1) do
+    with {:ok, {parts, decoder}} <- read_reference(decoder),
+         {:ok, {value, decoder}} <- read_value(decoder) do
       {:ok,
        {%SetStateHandler{
-          state_reference: state_reference,
+          state_reference: %StateReference{parts: parts},
           value: value
-        }, decoder2}}
+        }, decoder}}
     end
   end
 
