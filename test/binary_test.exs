@@ -559,6 +559,175 @@ defmodule RfwFormats.BinaryTest do
     assert value == library
   end
 
+  test "Library encoder: complex nested SetStateHandler binary format" do
+    widget = %Model.WidgetDeclaration{
+      name: "form",
+      initial_state:
+        OrderedMap.new([
+          {"user",
+           OrderedMap.new([
+             {"profile",
+              OrderedMap.new([
+                {"name", ""},
+                {"email", ""},
+                {"settings",
+                 OrderedMap.new([
+                   {"notifications", true},
+                   {"theme", "light"}
+                 ])}
+              ])}
+           ])}
+        ]),
+      root: %Model.ConstructorCall{
+        name: "Column",
+        arguments:
+          OrderedMap.new([
+            {"children",
+             [
+               %Model.ConstructorCall{
+                 name: "TextField",
+                 arguments:
+                   OrderedMap.new([
+                     {"value",
+                      %Model.StateReference{
+                        parts: ["user", "profile", "name"]
+                      }},
+                     {"onChanged",
+                      %Model.SetStateHandler{
+                        state_reference: %Model.StateReference{
+                          parts: ["user", "profile", "name"]
+                        },
+                        value: %Model.ArgsReference{
+                          parts: ["text"]
+                        }
+                      }}
+                   ])
+               },
+               %Model.ConstructorCall{
+                 name: "Switch",
+                 arguments:
+                   OrderedMap.new([
+                     {"value",
+                      %Model.StateReference{
+                        parts: ["user", "profile", "settings", "notifications"]
+                      }},
+                     {"onChanged",
+                      %Model.SetStateHandler{
+                        state_reference: %Model.StateReference{
+                          parts: ["user", "profile", "settings", "notifications"]
+                        },
+                        value: %Model.ArgsReference{
+                          parts: ["value"]
+                        }
+                      }}
+                   ])
+               }
+             ]}
+          ])
+      }
+    }
+
+    library = %Model.RemoteWidgetLibrary{
+      imports: [],
+      widgets: [widget]
+    }
+
+    binary = Binary.encode_library_blob(library)
+
+    # The exact bytes we expect for the first SetStateHandler (TextField's onChanged)
+    # This validates the precise binary format:
+    # - 0x11: SetStateHandler tag
+    # - 0x03: Length of parts array (3 parts)
+    # - Followed by the parts: "user", "profile", "name"
+    # - Then the value (ArgsReference to "text")
+    # SetStateHandler tag
+    text_field_handler_bytes =
+      <<
+        0x11,
+        # Length of parts (3)
+        0x03,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        # First part
+        0x04,
+        0x04,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        "user",
+        # Second part
+        0x04,
+        0x07,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        "profile",
+        # Third part
+        0x04,
+        0x04,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        "name",
+        # Args reference tag and length
+        0x0A,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        # Args reference part
+        0x04,
+        0x04,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        "text"
+      >>
+
+    assert binary =~ text_field_handler_bytes
+
+    decoded = Binary.decode_library_blob(binary)
+    assert decoded == library
+
+    decoded_widget = hd(decoded.widgets)
+    decoded_children = decoded_widget.root.arguments["children"]
+    text_field = hd(decoded_children)
+
+    assert %Model.SetStateHandler{
+             state_reference: %Model.StateReference{
+               parts: ["user", "profile", "name"]
+             },
+             value: %Model.ArgsReference{
+               parts: ["text"]
+             }
+           } = text_field.arguments["onChanged"]
+  end
+
   test "Library encoder: widget builders work" do
     text_arguments =
       OrderedMap.new([
