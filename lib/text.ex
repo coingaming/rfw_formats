@@ -8,28 +8,28 @@ defmodule RfwFormats.Text do
   alias RfwFormats.{Model, OrderedMap}
 
   defmodule Context do
-    defstruct loop_vars: [], current_scope: 0
+    defstruct loop_vars: [], scope_type: nil, widget_args: []
 
-    def push_scope(%Context{current_scope: scope} = ctx) do
-      %Context{ctx | current_scope: scope + 1}
+    def new do
+      %__MODULE__{}
     end
 
-    def pop_scope(%Context{current_scope: scope} = ctx) do
-      %Context{ctx | current_scope: max(0, scope - 1)}
+    def push_loop_var(%__MODULE__{} = ctx, var_name) do
+      %__MODULE__{ctx | loop_vars: [var_name | ctx.loop_vars]}
     end
 
-    def add_loop_var(%Context{loop_vars: vars} = ctx, var_name, scope) do
-      %Context{ctx | loop_vars: [{var_name, scope} | vars]}
-    end
-
-    def find_binding_distance(%Context{loop_vars: vars, current_scope: _current_scope}, var_name) do
-      vars
-      |> Enum.reverse()
-      |> Enum.find_index(fn {name, _scope} -> name == var_name end)
-      |> case do
-        nil -> nil
-        index -> index
+    def pop_loop_var(%__MODULE__{} = ctx) do
+      case ctx.loop_vars do
+        [_ | rest] -> %__MODULE__{ctx | loop_vars: rest}
+        [] -> ctx
       end
+    end
+  end
+
+  defp calculate_debruijn_index(loop_vars, var_name) do
+    case Enum.find_index(loop_vars, fn var -> var == var_name end) do
+      nil -> {:error, :variable_not_found}
+      index -> {:ok, index}
     end
   end
 
@@ -303,53 +303,53 @@ defmodule RfwFormats.Text do
   defp push_loop_var(rest, [loop_var: [var_name]], context, location, _offset) do
     check_reserved_word(var_name, location, rest)
 
-    # Initialize both scope_depth and bindings if not present
-    context =
-      context
-      |> Map.put_new(:scope_depth, 0)
-      |> Map.put_new(:bindings, %{})
-      |> Map.put(:scope_type, :loop)
+    ctx =
+      case context do
+        %Context{} -> context
+        _ -> Context.new()
+      end
 
-    # Update context with new binding
-    new_context = %{
-      context
-      | bindings: Map.put(context.bindings, var_name, context.scope_depth),
-        scope_depth: context.scope_depth + 1
-    }
-
-    {rest, [loop_var: [var_name]], new_context}
+    context = Context.push_loop_var(ctx, var_name)
+    {rest, [loop_var: [var_name]], context}
   end
 
   defp pop_loop_var(rest, args, context, _line, _offset) do
-    # Ensure scope_depth exists before updating
-    scope_depth = Map.get(context, :scope_depth, 1)
-    new_context = %{context | scope_depth: max(0, scope_depth - 1)}
-    {rest, args, new_context}
+    ctx =
+      case context do
+        %Context{} -> Context.pop_loop_var(context)
+        _ -> Context.new()
+      end
+
+    {rest, args, ctx}
   end
 
   defp check_loop_var(rest, parsed, context, _location, _offset) do
     var_name = Keyword.get(parsed, :var_name)
     raw_parts = Keyword.get(parsed, :parts, [])
-    # Ensure parts is always a list
-    parts = if is_list(raw_parts), do: raw_parts, else: [raw_parts]
+    parts = List.flatten([raw_parts])
 
-    case Map.get(context, :scope_type) do
-      :widget_builder ->
-        builder_ref = Model.new_widget_builder_arg_reference(var_name, parts)
-        {rest, [builder_ref], context}
+    ctx =
+      case context do
+        %Context{} -> context
+        _ -> Context.new()
+      end
 
-      :loop ->
-        bindings = Map.get(context, :bindings, %{})
-        current_depth = Map.get(context, :scope_depth, 0)
+    cond do
+      # Check if we're in widget builder scope and this is a widget arg
+      ctx.scope_type == :widget_builder && var_name in (ctx.widget_args || []) ->
+        # Create proper WidgetBuilderArgReference struct instead of raw map
+        ref = Model.new_widget_builder_arg_reference(var_name, parts)
+        {rest, [ref], ctx}
 
-        case Map.get(bindings, var_name) do
-          nil ->
-            {rest, [var_name], context}
+      # Try to resolve as loop variable
+      true ->
+        case calculate_debruijn_index(ctx.loop_vars, var_name) do
+          {:ok, index} ->
+            loop_ref = Model.new_loop_reference(index, parts)
+            {rest, [loop_ref], ctx}
 
-          binding_depth ->
-            loop_index = current_depth - binding_depth - 1
-            loop_ref = Model.new_loop_reference(loop_index, parts)
-            {rest, [loop_ref], context}
+          {:error, :variable_not_found} ->
+            {rest, [var_name], ctx}
         end
     end
   end
@@ -489,7 +489,7 @@ defmodule RfwFormats.Text do
     Model.new_event_handler(event_name, processed_args)
   end
 
-  defp process_widget_builder_refs(%OrderedMap{map: map, keys: keys} = ordered_map) do
+  defp process_widget_builder_refs(%OrderedMap{map: map, keys: keys}) do
     # Use Map.new/2 instead of Map.map/2 and handle OrderedMap properly
     processed_map =
       Map.new(map, fn
@@ -633,10 +633,24 @@ defmodule RfwFormats.Text do
   defp push_widget_arg(rest, [arg_name], context, location, _offset) do
     check_reserved_word(arg_name, location, rest)
 
-    {rest, [arg_name],
-     context
-     |> Map.put(:scope_type, :widget_builder)
-     |> Map.update(:widget_args, [arg_name], &[arg_name | &1])}
+    ctx =
+      case context do
+        %Context{} ->
+          %Context{
+            context
+            | scope_type: :widget_builder,
+              widget_args: [arg_name | context.widget_args || []]
+          }
+
+        _ ->
+          %Context{
+            scope_type: :widget_builder,
+            widget_args: [arg_name],
+            loop_vars: []
+          }
+      end
+
+    {rest, [arg_name], ctx}
   end
 
   defp pop_widget_arg(rest, args, context, _line, _offset) do
@@ -738,6 +752,7 @@ defmodule RfwFormats.Text do
   defcombinatorp(:widget_builder, widget_builder)
   defcombinatorp(:constructor_call, constructor_call)
   defcombinatorp(:constructor_argument, constructor_argument)
+
   defparsecp(:do_parse_library_file, library)
 
   defparsecp(
