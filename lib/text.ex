@@ -7,6 +7,32 @@ defmodule RfwFormats.Text do
 
   alias RfwFormats.{Model, OrderedMap}
 
+  defmodule Context do
+    defstruct loop_vars: [], current_scope: 0
+
+    def push_scope(%Context{current_scope: scope} = ctx) do
+      %Context{ctx | current_scope: scope + 1}
+    end
+
+    def pop_scope(%Context{current_scope: scope} = ctx) do
+      %Context{ctx | current_scope: max(0, scope - 1)}
+    end
+
+    def add_loop_var(%Context{loop_vars: vars} = ctx, var_name, scope) do
+      %Context{ctx | loop_vars: [{var_name, scope} | vars]}
+    end
+
+    def find_binding_distance(%Context{loop_vars: vars, current_scope: _current_scope}, var_name) do
+      vars
+      |> Enum.reverse()
+      |> Enum.find_index(fn {name, _scope} -> name == var_name end)
+      |> case do
+        nil -> nil
+        index -> index
+      end
+    end
+  end
+
   @reserved_words ~w(args data event false set state true)
 
   defp check_reserved_word(identifier, {line, _} = _location, rest) do
@@ -245,57 +271,6 @@ defmodule RfwFormats.Text do
     end)
   end
 
-  loop_var =
-    identifier
-    |> unwrap_and_tag(:var_name)
-    |> optional(
-      dot_separated_parts
-      |> unwrap_and_tag(:parts)
-    )
-    |> post_traverse({:check_loop_var, []})
-    |> label("loop variable")
-
-  defp find_last_index(list, value) do
-    list
-    |> Enum.with_index()
-    |> Enum.reduce(nil, fn {elem, index}, acc ->
-      if elem == value do
-        index
-      else
-        acc
-      end
-    end)
-  end
-
-  defp check_loop_var(rest, parsed, context, _location, _offset) do
-    var_name = Keyword.get(parsed, :var_name)
-    loop_vars = Map.get(context, :loop_vars, [])
-    raw_parts = Keyword.get(parsed, :parts, [])
-    parts = if is_list(raw_parts), do: raw_parts, else: [raw_parts]
-
-    cond do
-      loop_vars != [] ->
-        base_index = find_last_index(loop_vars, var_name)
-
-        if base_index == nil do
-          false
-        else
-          loop_index = length(loop_vars) - base_index - 1
-
-          loop_ref = Model.new_loop_reference(loop_index, parts)
-
-          {rest, [loop_ref], context}
-        end
-
-      var_name in Map.get(context, :widget_args, []) ->
-        builder_ref = Model.new_widget_builder_arg_reference(var_name, parts)
-        {rest, [builder_ref], context}
-
-      true ->
-        {rest, [var_name], context}
-    end
-  end
-
   loop =
     ignore(string("...for"))
     |> ignore(whitespace)
@@ -315,15 +290,68 @@ defmodule RfwFormats.Text do
     |> map({:create_loop, []})
     |> label("loop")
 
+  loop_var =
+    identifier
+    |> unwrap_and_tag(:var_name)
+    |> optional(
+      dot_separated_parts
+      |> unwrap_and_tag(:parts)
+    )
+    |> post_traverse({:check_loop_var, []})
+    |> label("loop variable")
+
   defp push_loop_var(rest, [loop_var: [var_name]], context, location, _offset) do
     check_reserved_word(var_name, location, rest)
 
-    {rest, [loop_var: [var_name]],
-     Map.update(context, :loop_vars, [var_name], &(&1 ++ [var_name]))}
+    # Initialize both scope_depth and bindings if not present
+    context =
+      context
+      |> Map.put_new(:scope_depth, 0)
+      |> Map.put_new(:bindings, %{})
+      |> Map.put(:scope_type, :loop)
+
+    # Update context with new binding
+    new_context = %{
+      context
+      | bindings: Map.put(context.bindings, var_name, context.scope_depth),
+        scope_depth: context.scope_depth + 1
+    }
+
+    {rest, [loop_var: [var_name]], new_context}
   end
 
   defp pop_loop_var(rest, args, context, _line, _offset) do
-    {rest, args, Map.update(context, :loop_vars, [], &List.delete_at(&1, -1))}
+    # Ensure scope_depth exists before updating
+    scope_depth = Map.get(context, :scope_depth, 1)
+    new_context = %{context | scope_depth: max(0, scope_depth - 1)}
+    {rest, args, new_context}
+  end
+
+  defp check_loop_var(rest, parsed, context, _location, _offset) do
+    var_name = Keyword.get(parsed, :var_name)
+    raw_parts = Keyword.get(parsed, :parts, [])
+    # Ensure parts is always a list
+    parts = if is_list(raw_parts), do: raw_parts, else: [raw_parts]
+
+    case Map.get(context, :scope_type) do
+      :widget_builder ->
+        builder_ref = Model.new_widget_builder_arg_reference(var_name, parts)
+        {rest, [builder_ref], context}
+
+      :loop ->
+        bindings = Map.get(context, :bindings, %{})
+        current_depth = Map.get(context, :scope_depth, 0)
+
+        case Map.get(bindings, var_name) do
+          nil ->
+            {rest, [var_name], context}
+
+          binding_depth ->
+            loop_index = current_depth - binding_depth - 1
+            loop_ref = Model.new_loop_reference(loop_index, parts)
+            {rest, [loop_ref], context}
+        end
+    end
   end
 
   defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, output}]) do
@@ -343,33 +371,6 @@ defmodule RfwFormats.Text do
 
     result = Model.new_loop(processed_input, processed_output)
     result
-  end
-
-  defp validate_switch_cases_traverse(
-         rest,
-         [{:cases, cases}, {:input, input}],
-         context,
-         {line, _col},
-         _offset
-       ) do
-    Enum.reduce(cases, {false, MapSet.new()}, fn [key, _value], {has_default, keys} ->
-      cond do
-        key == nil and has_default ->
-          raise __MODULE__.Error, {"Switch has multiple default cases", rest, line}
-
-        key == nil ->
-          {true, keys}
-
-        MapSet.member?(keys, key) ->
-          raise __MODULE__.Error,
-                {"Switch has duplicate cases for key #{inspect(key)}", rest, line}
-
-        true ->
-          {has_default, MapSet.put(keys, key)}
-      end
-    end)
-
-    {rest, [{:cases, cases}, {:input, input}], context}
   end
 
   switch =
@@ -406,6 +407,33 @@ defmodule RfwFormats.Text do
     |> wrap()
     |> map({:create_switch, []})
     |> label("switch statement")
+
+  defp validate_switch_cases_traverse(
+         rest,
+         [{:cases, cases}, {:input, input}],
+         context,
+         {line, _col},
+         _offset
+       ) do
+    Enum.reduce(cases, {false, MapSet.new()}, fn [key, _value], {has_default, keys} ->
+      cond do
+        key == nil and has_default ->
+          raise __MODULE__.Error, {"Switch has multiple default cases", rest, line}
+
+        key == nil ->
+          {true, keys}
+
+        MapSet.member?(keys, key) ->
+          raise __MODULE__.Error,
+                {"Switch has duplicate cases for key #{inspect(key)}", rest, line}
+
+        true ->
+          {has_default, MapSet.put(keys, key)}
+      end
+    end)
+
+    {rest, [{:cases, cases}, {:input, input}], context}
+  end
 
   defp create_switch(input: input, cases: cases) do
     Model.new_switch(input, create_map(List.flatten(cases)))
@@ -455,9 +483,32 @@ defmodule RfwFormats.Text do
     |> map({:create_event_handler, []})
     |> label("event handler")
 
-  defp create_event_handler([event_name, event_arguments]) do
-    Model.new_event_handler(event_name, event_arguments)
+  defp create_event_handler([event_name, event_arguments]) when is_binary(event_name) do
+    # Adding spec and guard to ensure local return
+    processed_args = process_widget_builder_refs(event_arguments)
+    Model.new_event_handler(event_name, processed_args)
   end
+
+  defp process_widget_builder_refs(%OrderedMap{map: map, keys: keys} = ordered_map) do
+    # Use Map.new/2 instead of Map.map/2 and handle OrderedMap properly
+    processed_map =
+      Map.new(map, fn
+        {k, %{scope_type: :widget_builder, var_name: name, parts: parts}} ->
+          {k, Model.new_widget_builder_arg_reference(name, parts)}
+
+        {k, v} ->
+          {k, v}
+      end)
+
+    # Create new OrderedMap with same keys but processed values
+    %OrderedMap{
+      map: processed_map,
+      keys: keys
+    }
+  end
+
+  # Add a catch-all clause for non-OrderedMap inputs
+  defp process_widget_builder_refs(other), do: other
 
   set_state_handler =
     ignore(string("set"))
@@ -581,7 +632,11 @@ defmodule RfwFormats.Text do
 
   defp push_widget_arg(rest, [arg_name], context, location, _offset) do
     check_reserved_word(arg_name, location, rest)
-    {rest, [arg_name], Map.update(context, :widget_args, [arg_name], &[arg_name | &1])}
+
+    {rest, [arg_name],
+     context
+     |> Map.put(:scope_type, :widget_builder)
+     |> Map.update(:widget_args, [arg_name], &[arg_name | &1])}
   end
 
   defp pop_widget_arg(rest, args, context, _line, _offset) do
