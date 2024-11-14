@@ -255,16 +255,37 @@ defmodule RfwFormats.Text do
     |> post_traverse({:check_loop_var, []})
     |> label("loop variable")
 
-  defp check_loop_var(rest, parsed, context, {_line, _} = location, _offset) do
+  defp find_last_index(list, value) do
+    list
+    |> Enum.with_index()
+    |> Enum.reduce(nil, fn {elem, index}, acc ->
+      if elem == value do
+        index
+      else
+        acc
+      end
+    end)
+  end
+
+  defp check_loop_var(rest, parsed, context, _location, _offset) do
     var_name = Keyword.get(parsed, :var_name)
-    check_reserved_word(var_name, location, rest)
+    loop_vars = Map.get(context, :loop_vars, [])
     raw_parts = Keyword.get(parsed, :parts, [])
     parts = if is_list(raw_parts), do: raw_parts, else: [raw_parts]
 
     cond do
-      index = Enum.find_index(Map.get(context, :loop_vars, []), &(&1 == var_name)) ->
-        loop_ref = Model.new_loop_reference(index, parts)
-        {rest, [loop_ref], context}
+      loop_vars != [] ->
+        base_index = find_last_index(loop_vars, var_name)
+
+        if base_index == nil do
+          false
+        else
+          loop_index = length(loop_vars) - base_index - 1
+
+          loop_ref = Model.new_loop_reference(loop_index, parts)
+
+          {rest, [loop_ref], context}
+        end
 
       var_name in Map.get(context, :widget_args, []) ->
         builder_ref = Model.new_widget_builder_arg_reference(var_name, parts)
@@ -296,11 +317,13 @@ defmodule RfwFormats.Text do
 
   defp push_loop_var(rest, [loop_var: [var_name]], context, location, _offset) do
     check_reserved_word(var_name, location, rest)
-    {rest, [loop_var: [var_name]], Map.update(context, :loop_vars, [var_name], &[var_name | &1])}
+
+    {rest, [loop_var: [var_name]],
+     Map.update(context, :loop_vars, [var_name], &(&1 ++ [var_name]))}
   end
 
   defp pop_loop_var(rest, args, context, _line, _offset) do
-    {rest, args, Map.update(context, :loop_vars, [], &tl(&1))}
+    {rest, args, Map.update(context, :loop_vars, [], &List.delete_at(&1, -1))}
   end
 
   defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, output}]) do
