@@ -1,7 +1,7 @@
 defmodule RfwFormats.TextTest do
   use ExUnit.Case
 
-  alias RfwFormats.{Text, Model, OrderedMap}
+  alias RfwFormats.{Text, Binary, Model, OrderedMap}
 
   test "empty parseDataFile" do
     result = Text.parse_data_file("{}")
@@ -373,6 +373,68 @@ defmodule RfwFormats.TextTest do
 
     assert input == []
     assert output == "e"
+  end
+
+  test "parseLibraryFile: nested loops maintain correct scope indices" do
+    template = """
+    widget loops = Column(
+      children: [
+        ...for section in data.sections:
+          Column(
+            children: [
+              ...for row in section.rows:
+                Column(
+                  children: [
+                    ...for cell in row.cells:
+                      Builder(
+                        builder: (ctx) =>
+                          switch cell.type {
+                            "active": Text(text: ["S:", section.id, " R:", row.id, " C:", cell.id])
+                          }
+                      )
+                  ]
+                )
+            ]
+          )
+      ]
+    );
+    """
+
+    parsed = Text.parse_library_file(template)
+    binary = Binary.encode_library_blob(parsed)
+    decoded = Binary.decode_library_blob(binary)
+
+    assert decoded == parsed
+
+    widget = hd(parsed.widgets)
+    %Model.ConstructorCall{name: "Column"} = widget.root
+    [sections_loop] = widget.root.arguments["children"]
+
+    assert %Model.Loop{} = sections_loop
+    assert %Model.DataReference{parts: ["sections"]} = sections_loop.input
+    section_column = sections_loop.output
+    [rows_loop] = section_column.arguments["children"]
+
+    assert %Model.Loop{} = rows_loop
+    assert %Model.LoopReference{loop: 0, parts: ["rows"]} = rows_loop.input
+    row_column = rows_loop.output
+    [cells_loop] = row_column.arguments["children"]
+
+    assert %Model.Loop{} = cells_loop
+    assert %Model.LoopReference{loop: 0, parts: ["cells"]} = cells_loop.input
+
+    builder = cells_loop.output
+    assert %Model.ConstructorCall{name: "Builder"} = builder
+    switch = builder.arguments["builder"].widget
+    assert %Model.LoopReference{loop: 0, parts: ["type"]} = switch.input
+
+    text = hd(Map.values(switch.outputs.map))
+    assert %Model.ConstructorCall{name: "Text"} = text
+    ["S:", section_ref, " R:", row_ref, " C:", cell_ref] = text.arguments["text"]
+
+    assert %Model.LoopReference{loop: 2, parts: ["id"]} = section_ref
+    assert %Model.LoopReference{loop: 1, parts: ["id"]} = row_ref
+    assert %Model.LoopReference{loop: 0, parts: ["id"]} = cell_ref
   end
 
   test "parseLibraryFile: switch" do

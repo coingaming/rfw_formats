@@ -1,6 +1,5 @@
 defmodule RfwFormats.IntegrationTest do
   use ExUnit.Case
-  require Logger
 
   alias RfwFormats.{Text, Binary, Model, OrderedMap}
 
@@ -320,17 +319,12 @@ defmodule RfwFormats.IntegrationTest do
     binary = Binary.encode_library_blob(parsed)
     decoded = Binary.decode_library_blob(binary)
 
-    inspect_options = [limit: :infinity, printable_limit: :infinity]
-
-    Logger.debug("Decoded binary: #{inspect(binary, inspect_options)}")
-
     assert binary == expected_binary
     assert decoded == parsed
 
     widget = hd(decoded.widgets)
     assert widget.name == "form"
 
-    # Verify initial state structure
     assert %OrderedMap{
              keys: ["formData"],
              map: %{
@@ -345,14 +339,12 @@ defmodule RfwFormats.IntegrationTest do
              }
            } = widget.initial_state
 
-    # Verify root Column structure
     assert %Model.ConstructorCall{name: "Column"} = widget.root
     children = widget.root.arguments["children"]
     assert length(children) == 4
 
     [username_field, email_field, form_state_builder, submit_button] = children
 
-    # Verify username TextField
     assert %Model.ConstructorCall{name: "TextField"} = username_field
 
     assert %Model.StateReference{parts: ["formData", "username"]} =
@@ -363,7 +355,6 @@ defmodule RfwFormats.IntegrationTest do
              value: %Model.ArgsReference{parts: ["text"]}
            } = username_field.arguments["onChanged"]
 
-    # Verify email TextField
     assert %Model.ConstructorCall{name: "TextField"} = email_field
     assert %Model.StateReference{parts: ["formData", "email"]} = email_field.arguments["value"]
 
@@ -372,11 +363,9 @@ defmodule RfwFormats.IntegrationTest do
              value: %Model.ArgsReference{parts: ["text"]}
            } = email_field.arguments["onChanged"]
 
-    # Verify form state builder
     assert %Model.ConstructorCall{name: "Builder"} = form_state_builder
     assert %Model.WidgetBuilderDeclaration{} = form_state_builder.arguments["builder"]
 
-    # Verify submit button
     assert %Model.ConstructorCall{name: "Button"} = submit_button
 
     assert %Model.EventHandler{
@@ -391,7 +380,7 @@ defmodule RfwFormats.IntegrationTest do
            } = submit_button.arguments["onPressed"]
   end
 
-  test "complex data transformation with nested loops and builders" do
+  test "Complex data transformation with nested loops and builders" do
     template = """
     import widgets;
     import material;
@@ -453,23 +442,83 @@ defmodule RfwFormats.IntegrationTest do
     );
     """
 
+    expected_binary =
+      <<254, 82, 70, 87, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0,
+        119, 105, 100, 103, 101, 116, 115, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 109,
+        97, 116, 101, 114, 105, 97, 108, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 100, 97,
+        116, 97, 71, 114, 105, 100, 0, 0, 0, 0, 0, 0, 0, 0, 9, 6, 0, 0, 0, 0, 0, 0, 0, 67, 111,
+        108, 117, 109, 110, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 99, 104, 105, 108,
+        100, 114, 101, 110, 5, 2, 0, 0, 0, 0, 0, 0, 0, 9, 3, 0, 0, 0, 0, 0, 0, 0, 82, 111, 119, 1,
+        0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 99, 104, 105, 108, 100, 114, 101, 110, 5, 2,
+        0, 0, 0, 0, 0, 0, 0, 9, 4, 0, 0, 0, 0, 0, 0, 0, 84, 101, 120, 116, 1, 0, 0, 0, 0, 0, 0, 0,
+        4, 0, 0, 0, 0, 0, 0, 0, 116, 101, 120, 116, 4, 9, 0, 0, 0, 0, 0, 0, 0, 68, 97, 116, 97,
+        32, 71, 114, 105, 100, 9, 7, 0, 0, 0, 0, 0, 0, 0, 66, 117, 105, 108, 100, 101, 114, 1, 0,
+        0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 98, 117, 105, 108, 100, 101, 114, 18, 5, 0, 0,
+        0, 0, 0, 0, 0, 115, 116, 97, 116, 115, 9, 4, 0, 0, 0, 0, 0, 0, 0, 84, 101, 120, 116, 1, 0,
+        0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 116, 101, 120, 116, 5, 2, 0, 0, 0, 0, 0, 0, 0,
+        4, 12, 0, 0, 0, 0, 0, 0, 0, 84, 111, 116, 97, 108, 32, 82, 111, 119, 115, 58, 32, 19, 5,
+        0, 0, 0, 0, 0, 0, 0, 115, 116, 97, 116, 115, 1, 0, 0, 0, 0, 0, 0, 0, 4, 9, 0, 0, 0, 0, 0,
+        0, 0, 116, 111, 116, 97, 108, 82, 111, 119, 115, 8, 11, 1, 0, 0, 0, 0, 0, 0, 0, 4, 8, 0,
+        0, 0, 0, 0, 0, 0, 115, 101, 99, 116, 105, 111, 110, 115, 9, 6, 0, 0, 0, 0, 0, 0, 0, 67,
+        111, 108, 117, 109, 110, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 99, 104, 105,
+        108, 100, 114, 101, 110, 5, 2, 0, 0, 0, 0, 0, 0, 0, 9, 9, 0, 0, 0, 0, 0, 0, 0, 67, 111,
+        110, 116, 97, 105, 110, 101, 114, 2, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 99, 111,
+        108, 111, 114, 2, 238, 238, 238, 255, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 99, 104, 105,
+        108, 100, 9, 4, 0, 0, 0, 0, 0, 0, 0, 84, 101, 120, 116, 1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0,
+        0, 0, 0, 0, 0, 116, 101, 120, 116, 12, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4,
+        5, 0, 0, 0, 0, 0, 0, 0, 116, 105, 116, 108, 101, 8, 12, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+        0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 0, 114, 111, 119, 115, 9, 7, 0, 0, 0, 0, 0, 0, 0,
+        66, 117, 105, 108, 100, 101, 114, 1, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 98, 117,
+        105, 108, 100, 101, 114, 18, 7, 0, 0, 0, 0, 0, 0, 0, 99, 111, 110, 116, 101, 120, 116, 9,
+        3, 0, 0, 0, 0, 0, 0, 0, 82, 111, 119, 1, 0, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 99,
+        104, 105, 108, 100, 114, 101, 110, 5, 1, 0, 0, 0, 0, 0, 0, 0, 8, 12, 0, 0, 0, 0, 0, 0, 0,
+        0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 99, 101, 108, 108, 115, 9, 9, 0, 0,
+        0, 0, 0, 0, 0, 67, 111, 110, 116, 97, 105, 110, 101, 114, 2, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0,
+        0, 0, 0, 0, 0, 112, 97, 100, 100, 105, 110, 103, 9, 10, 0, 0, 0, 0, 0, 0, 0, 69, 100, 103,
+        101, 73, 110, 115, 101, 116, 115, 1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 97, 108,
+        108, 2, 8, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 99, 104, 105, 108, 100, 15, 12, 0,
+        0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 0, 116, 121, 112,
+        101, 4, 0, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 0, 0, 116, 101, 120, 116, 9, 4, 0, 0, 0,
+        0, 0, 0, 0, 84, 101, 120, 116, 1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 116, 101,
+        120, 116, 12, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 5, 0, 0, 0, 0, 0, 0, 0,
+        118, 97, 108, 117, 101, 4, 6, 0, 0, 0, 0, 0, 0, 0, 110, 117, 109, 98, 101, 114, 9, 4, 0,
+        0, 0, 0, 0, 0, 0, 84, 101, 120, 116, 2, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 116,
+        101, 120, 116, 12, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 5, 0, 0, 0, 0, 0, 0,
+        0, 118, 97, 108, 117, 101, 5, 0, 0, 0, 0, 0, 0, 0, 115, 116, 121, 108, 101, 9, 9, 0, 0, 0,
+        0, 0, 0, 0, 84, 101, 120, 116, 83, 116, 121, 108, 101, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0,
+        0, 0, 0, 0, 99, 111, 108, 111, 114, 15, 12, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+        0, 4, 5, 0, 0, 0, 0, 0, 0, 0, 118, 97, 108, 117, 101, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0,
+        0, 0, 0, 0, 0, 2, 0, 0, 255, 0, 0, 0, 0, 0, 16, 2, 0, 0, 0, 0, 0, 0, 0, 0, 4, 6, 0, 0, 0,
+        0, 0, 0, 0, 97, 99, 116, 105, 111, 110, 9, 6, 0, 0, 0, 0, 0, 0, 0, 66, 117, 116, 116, 111,
+        110, 2, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 111, 110, 80, 114, 101, 115, 115,
+        101, 100, 14, 10, 0, 0, 0, 0, 0, 0, 0, 99, 101, 108, 108, 65, 99, 116, 105, 111, 110, 3,
+        0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 115, 101, 99, 116, 105, 111, 110, 73, 100,
+        12, 2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 2, 0, 0, 0, 0, 0, 0, 0, 105, 100,
+        5, 0, 0, 0, 0, 0, 0, 0, 114, 111, 119, 73, 100, 12, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0, 0, 4, 2, 0, 0, 0, 0, 0, 0, 0, 105, 100, 6, 0, 0, 0, 0, 0, 0, 0, 99, 101, 108, 108,
+        73, 100, 12, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 4, 2, 0, 0, 0, 0, 0, 0, 0,
+        105, 100, 5, 0, 0, 0, 0, 0, 0, 0, 99, 104, 105, 108, 100, 9, 4, 0, 0, 0, 0, 0, 0, 0, 84,
+        101, 120, 116, 1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 116, 101, 120, 116, 4, 6,
+        0, 0, 0, 0, 0, 0, 0, 65, 99, 116, 105, 111, 110, 16, 9, 4, 0, 0, 0, 0, 0, 0, 0, 84, 101,
+        120, 116, 1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 116, 101, 120, 116, 4, 7, 0, 0,
+        0, 0, 0, 0, 0, 85, 110, 107, 110, 111, 119, 110>>
+
     parsed = Text.parse_library_file(template)
     binary = Binary.encode_library_blob(parsed)
     decoded = Binary.decode_library_blob(binary)
 
+    assert binary == expected_binary
     assert decoded == parsed
 
     widget = hd(decoded.widgets)
     assert widget.name == "dataGrid"
 
-    # Verify root Column structure
     assert %Model.ConstructorCall{name: "Column"} = widget.root
     children = widget.root.arguments["children"]
     assert length(children) == 2
 
     [header_row, sections_loop] = children
 
-    # Verify header row
     assert %Model.ConstructorCall{name: "Row"} = header_row
     header_children = header_row.arguments["children"]
     assert length(header_children) == 2
@@ -477,41 +526,34 @@ defmodule RfwFormats.IntegrationTest do
     assert %Model.ConstructorCall{name: "Text"} = title
     assert %Model.ConstructorCall{name: "Builder"} = stats_builder
 
-    # Verify sections loop
     assert %Model.Loop{} = sections_loop
     assert %Model.DataReference{parts: ["sections"]} = sections_loop.input
     assert %Model.ConstructorCall{name: "Column"} = sections_loop.output
 
-    # Verify section column structure
     section_children = sections_loop.output.arguments["children"]
     assert length(section_children) == 2
     [section_header, rows_loop] = section_children
 
-    # Verify section header
     assert %Model.ConstructorCall{name: "Container"} = section_header
     assert section_header.arguments["color"] == 0xFFEEEEEE
     assert %Model.ConstructorCall{name: "Text"} = section_header.arguments["child"]
 
-    # Verify rows loop
     assert %Model.Loop{} = rows_loop
-    assert %Model.LoopReference{loop: 1, parts: ["rows"]} = rows_loop.input
+    assert %Model.LoopReference{loop: 0, parts: ["rows"]} = rows_loop.input
     assert %Model.ConstructorCall{name: "Builder"} = rows_loop.output
 
-    # Verify row builder
     row_builder = rows_loop.output.arguments["builder"]
     assert %Model.WidgetBuilderDeclaration{} = row_builder
     assert %Model.ConstructorCall{name: "Row"} = row_builder.widget
 
-    # Verify cells loop
     cells_loop = hd(row_builder.widget.arguments["children"])
     assert %Model.Loop{} = cells_loop
-    assert %Model.LoopReference{loop: 1, parts: ["cells"]} = cells_loop.input
+    assert %Model.LoopReference{loop: 0, parts: ["cells"]} = cells_loop.input
     assert %Model.ConstructorCall{name: "Container"} = cells_loop.output
 
-    # Verify cell container
     cell_switch = cells_loop.output.arguments["child"]
     assert %Model.Switch{} = cell_switch
-    assert %Model.LoopReference{loop: 1, parts: ["type"]} = cell_switch.input
+    assert %Model.LoopReference{loop: 0, parts: ["type"]} = cell_switch.input
     assert length(Map.keys(cell_switch.outputs.map)) == 4
   end
 end

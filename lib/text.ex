@@ -29,6 +29,14 @@ defmodule RfwFormats.Text do
     def pop_loop_var(%__MODULE__{} = ctx) do
       %__MODULE__{ctx | loop_vars: tl(ctx.loop_vars)}
     end
+
+    def get_loop_var_index(ctx, var_name) do
+      # Find the index of the variable in the loop_vars list
+      case Enum.find_index(ctx.loop_vars, &(&1 == var_name)) do
+        nil -> {:error, :variable_not_found}
+        index -> {:ok, index}
+      end
+    end
   end
 
   defmodule Error do
@@ -306,8 +314,7 @@ defmodule RfwFormats.Text do
   loop =
     ignore(string("...for"))
     |> ignore(whitespace)
-    |> tag(identifier, :loop_var)
-    |> post_traverse({:push_loop_var, []})
+    |> unwrap_and_tag(identifier, :loop_var)
     |> ignore(whitespace)
     |> ignore(string("in"))
     |> ignore(whitespace)
@@ -315,7 +322,7 @@ defmodule RfwFormats.Text do
     |> tag(parsec(:value), :input)
     |> ignore(string(":"))
     |> ignore(whitespace)
-    |> lookahead_not(string("null"))
+    |> post_traverse({:push_loop_var, []})
     |> tag(parsec(:value), :output)
     |> post_traverse({:pop_loop_var, []})
     |> wrap()
@@ -332,17 +339,8 @@ defmodule RfwFormats.Text do
     |> post_traverse({:check_loop_var, []})
     |> label("loop variable")
 
-  defp calculate_debruijn_index(loop_vars, var_name) do
-    case Enum.find_index(loop_vars, fn var -> var == var_name end) do
-      nil ->
-        {:error, :variable_not_found}
-
-      index ->
-        {:ok, index}
-    end
-  end
-
-  defp push_loop_var(rest, [loop_var: [var_name]], context, location, _offset) do
+  defp push_loop_var(rest, args, context, location, _offset) do
+    var_name = Keyword.get(args, :loop_var)
     check_reserved_word(var_name, location, rest)
 
     ctx =
@@ -352,8 +350,7 @@ defmodule RfwFormats.Text do
       end
 
     context = Context.push_loop_var(ctx, var_name)
-
-    {rest, [loop_var: [var_name]], context}
+    {rest, args, context}
   end
 
   defp pop_loop_var(rest, args, context, _line, _offset) do
@@ -380,18 +377,18 @@ defmodule RfwFormats.Text do
     cond do
       ctx.scope_type == :widget_builder && var_name in (ctx.widget_args || []) ->
         ref = Model.new_widget_builder_arg_reference(var_name, parts)
-
         {rest, [ref], ctx}
 
       true ->
-        case calculate_debruijn_index(ctx.loop_vars, var_name) do
-          {:ok, index} ->
-            loop_ref = Model.new_loop_reference(index, parts)
-
-            {rest, [loop_ref], ctx}
-
-          {:error, :variable_not_found} ->
+        case Enum.find_index(ctx.loop_vars, fn var -> var == var_name end) do
+          nil ->
             {rest, [var_name], ctx}
+
+          index ->
+            final_index = if var_name == hd(ctx.loop_vars), do: 0, else: index
+
+            loop_ref = Model.new_loop_reference(final_index, parts)
+            {rest, [loop_ref], ctx}
         end
     end
   end
