@@ -27,13 +27,7 @@ defmodule RfwFormats.Text do
     end
 
     def pop_loop_var(%__MODULE__{} = ctx) do
-      case ctx.loop_vars do
-        [_popped | rest] ->
-          %__MODULE__{ctx | loop_vars: rest}
-
-        [] ->
-          ctx
-      end
+      %__MODULE__{ctx | loop_vars: tl(ctx.loop_vars)}
     end
   end
 
