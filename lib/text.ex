@@ -48,7 +48,6 @@ defmodule RfwFormats.Text do
     Logger.debug("Calculating DeBruijn index for #{var_name}")
     Logger.debug("Current loop_vars stack: #{inspect(loop_vars)}")
     # Don't reverse - we already have most recent vars at the front
-    # Most recent vars should have lower indices (0, 1, 2...)
 
     case Enum.find_index(loop_vars, fn var -> var == var_name end) do
       nil ->
@@ -56,7 +55,7 @@ defmodule RfwFormats.Text do
         {:error, :variable_not_found}
 
       index ->
-        Logger.debug("Found #{var_name} at index #{index} in stack #{inspect(loop_vars)}")
+        Logger.debug("Found #{var_name} at index #{index}")
         {:ok, index}
     end
   end
