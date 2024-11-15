@@ -4,9 +4,16 @@ defmodule RfwFormats.Text do
   """
 
   import NimbleParsec
-  require Logger
 
   alias RfwFormats.{Model, OrderedMap}
+
+  @reserved_words ~w(args data event false set state true)
+
+  defp check_reserved_word(identifier, {line, _} = _location, rest) do
+    if identifier in @reserved_words do
+      raise __MODULE__.Error, {"#{identifier} is a reserved word", rest, line}
+    end
+  end
 
   defmodule Context do
     defstruct loop_vars: [], scope_type: nil, widget_args: []
@@ -16,55 +23,40 @@ defmodule RfwFormats.Text do
     end
 
     def push_loop_var(%__MODULE__{} = ctx, var_name) do
-      Logger.debug("Pushing loop var: #{var_name}, Current stack: #{inspect(ctx.loop_vars)}")
-      # Add new loop var to the beginning of the list
-      updated = %__MODULE__{ctx | loop_vars: [var_name | ctx.loop_vars]}
-      Logger.debug("After push: #{inspect(updated.loop_vars)}")
-      updated
+      %__MODULE__{ctx | loop_vars: [var_name | ctx.loop_vars]}
     end
 
     def pop_loop_var(%__MODULE__{} = ctx) do
-      Logger.debug("Before pop: #{inspect(ctx.loop_vars)}")
+      case ctx.loop_vars do
+        [_popped | rest] ->
+          %__MODULE__{ctx | loop_vars: rest}
 
-      result =
-        case ctx.loop_vars do
-          [popped | rest] ->
-            Logger.debug("Popping loop var: #{popped}")
-            %__MODULE__{ctx | loop_vars: rest}
-
-          [] ->
-            Logger.debug("Attempted pop on empty stack")
-            ctx
-        end
-
-      Logger.debug("After pop: #{inspect(result.loop_vars)}")
-      result
+        [] ->
+          ctx
+      end
     end
   end
 
-  # ... (keep existing code until calculate_debruijn_index function)
+  defmodule Error do
+    defexception [:message, :rest, :line]
 
-  defp calculate_debruijn_index(loop_vars, var_name) do
-    Logger.debug("Calculating DeBruijn index for #{var_name}")
-    Logger.debug("Current loop_vars stack: #{inspect(loop_vars)}")
-    # Don't reverse - we already have most recent vars at the front
+    @impl true
+    def message(%{message: message}), do: message
 
-    case Enum.find_index(loop_vars, fn var -> var == var_name end) do
-      nil ->
-        Logger.debug("Variable #{var_name} not found in stack")
-        {:error, :variable_not_found}
-
-      index ->
-        Logger.debug("Found #{var_name} at index #{index}")
-        {:ok, index}
+    def exception({message, rest, line}) do
+      %__MODULE__{
+        message: "#{message} at line #{line}",
+        rest: rest,
+        line: line
+      }
     end
-  end
 
-  @reserved_words ~w(args data event false set state true)
-
-  defp check_reserved_word(identifier, {line, _} = _location, rest) do
-    if identifier in @reserved_words do
-      raise __MODULE__.Error, {"#{identifier} is a reserved word", rest, line}
+    def exception({message, rest, _context, {line, _}, _}) do
+      %__MODULE__{
+        message: "#{message} at line #{line}",
+        rest: rest,
+        line: line
+      }
     end
   end
 
@@ -160,6 +152,25 @@ defmodule RfwFormats.Text do
       utf8_char([])
     ])
     |> label("escape sequence")
+
+  defp parse_unicode_escape(hex) do
+    # Convert hex string to integer, handling both uppercase and lowercase
+    code_point =
+      hex
+      |> String.downcase()
+      |> String.to_integer(16)
+
+    cond do
+      code_point <= 0xD7FF ->
+        <<code_point::utf8>>
+
+      code_point <= 0xFFFF ->
+        <<code_point::16>>
+
+      true ->
+        raise "Invalid code point in Unicode escape sequence: #{hex}"
+    end
+  end
 
   double_string_literal =
     ignore(ascii_char([?"]))
@@ -327,9 +338,18 @@ defmodule RfwFormats.Text do
     |> post_traverse({:check_loop_var, []})
     |> label("loop variable")
 
+  defp calculate_debruijn_index(loop_vars, var_name) do
+    case Enum.find_index(loop_vars, fn var -> var == var_name end) do
+      nil ->
+        {:error, :variable_not_found}
+
+      index ->
+        {:ok, index}
+    end
+  end
+
   defp push_loop_var(rest, [loop_var: [var_name]], context, location, _offset) do
     check_reserved_word(var_name, location, rest)
-    Logger.debug("Push loop var called with: #{var_name}, Location: #{inspect(location)}")
 
     ctx =
       case context do
@@ -338,34 +358,24 @@ defmodule RfwFormats.Text do
       end
 
     context = Context.push_loop_var(ctx, var_name)
-    Logger.debug("Context after push: #{inspect(context)}")
+
     {rest, [loop_var: [var_name]], context}
   end
 
   defp pop_loop_var(rest, args, context, _line, _offset) do
-    Logger.debug("Pop loop var called with context: #{inspect(context)}")
-
     ctx =
       case context do
         %Context{} -> Context.pop_loop_var(context)
         _ -> Context.new()
       end
 
-    Logger.debug("Context after pop: #{inspect(ctx)}")
     {rest, args, ctx}
   end
 
-  defp check_loop_var(rest, parsed, context, location, _offset) do
+  defp check_loop_var(rest, parsed, context, _location, _offset) do
     var_name = Keyword.get(parsed, :var_name)
     raw_parts = Keyword.get(parsed, :parts, [])
     parts = List.flatten([raw_parts])
-
-    Logger.debug("Check loop var called")
-    Logger.debug("Variable name: #{var_name}")
-    Logger.debug("Raw parts: #{inspect(raw_parts)}")
-    Logger.debug("Flattened parts: #{inspect(parts)}")
-    Logger.debug("Location: #{inspect(location)}")
-    Logger.debug("Current context: #{inspect(context)}")
 
     ctx =
       case context do
@@ -373,44 +383,32 @@ defmodule RfwFormats.Text do
         _ -> Context.new()
       end
 
-    Logger.debug("Processed context: #{inspect(ctx)}")
-
     cond do
-      # Check if we're in widget builder scope and this is a widget arg
       ctx.scope_type == :widget_builder && var_name in (ctx.widget_args || []) ->
-        Logger.debug("Creating WidgetBuilderArgReference for #{var_name}")
         ref = Model.new_widget_builder_arg_reference(var_name, parts)
-        Logger.debug("Created reference: #{inspect(ref)}")
+
         {rest, [ref], ctx}
 
-      # Try to resolve as loop variable
       true ->
-        Logger.debug("Attempting to resolve as loop variable")
-
         case calculate_debruijn_index(ctx.loop_vars, var_name) do
           {:ok, index} ->
-            Logger.debug("Creating loop reference with index #{index}")
             loop_ref = Model.new_loop_reference(index, parts)
-            Logger.debug("Created loop reference: #{inspect(loop_ref)}")
+
             {rest, [loop_ref], ctx}
 
           {:error, :variable_not_found} ->
-            Logger.debug("Variable #{var_name} not found in loop vars")
             {rest, [var_name], ctx}
         end
     end
   end
 
   defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, output}]) do
-    Logger.debug("Creating loop with input: #{inspect(input)}, output: #{inspect(output)}")
-    # Flatten the input if necessary
     processed_input =
       case input do
         [inner] -> inner
         _ -> input
       end
 
-    # Flatten the output if necessary
     processed_output =
       case output do
         [inner] -> inner
@@ -418,7 +416,7 @@ defmodule RfwFormats.Text do
       end
 
     result = Model.new_loop(processed_input, processed_output)
-    Logger.debug("Created loop: #{inspect(result)}")
+
     result
   end
 
@@ -538,27 +536,6 @@ defmodule RfwFormats.Text do
     Model.new_event_handler(event_name, processed_args)
   end
 
-  defp process_widget_builder_refs(%OrderedMap{map: map, keys: keys}) do
-    # Use Map.new/2 instead of Map.map/2 and handle OrderedMap properly
-    processed_map =
-      Map.new(map, fn
-        {k, %{scope_type: :widget_builder, var_name: name, parts: parts}} ->
-          {k, Model.new_widget_builder_arg_reference(name, parts)}
-
-        {k, v} ->
-          {k, v}
-      end)
-
-    # Create new OrderedMap with same keys but processed values
-    %OrderedMap{
-      map: processed_map,
-      keys: keys
-    }
-  end
-
-  # Add a catch-all clause for non-OrderedMap inputs
-  defp process_widget_builder_refs(other), do: other
-
   set_state_handler =
     ignore(string("set"))
     |> ignore(whitespace)
@@ -662,6 +639,24 @@ defmodule RfwFormats.Text do
     |> map({:create_widget_builder, []})
     |> label("widget builder")
 
+  defp process_widget_builder_refs(%OrderedMap{map: map, keys: keys}) do
+    processed_map =
+      Map.new(map, fn
+        {k, %{scope_type: :widget_builder, var_name: name, parts: parts}} ->
+          {k, Model.new_widget_builder_arg_reference(name, parts)}
+
+        {k, v} ->
+          {k, v}
+      end)
+
+    %OrderedMap{
+      map: processed_map,
+      keys: keys
+    }
+  end
+
+  defp process_widget_builder_refs(other), do: other
+
   defp validate_widget_builder_value(rest, [value | _] = args, context, {line, _}, _offset) do
     case value do
       %Model.ConstructorCall{} ->
@@ -736,6 +731,16 @@ defmodule RfwFormats.Text do
     |> map({:create_constructor_call, []})
     |> label("constructor call")
 
+  defp assemble_constructor_call_args([name | args]) do
+    args =
+      Enum.flat_map(args, fn
+        [key, value] -> [key, value]
+        other -> other
+      end)
+
+    [name | args]
+  end
+
   defp create_constructor_call([name | args]) do
     arguments = create_map(args)
     Model.new_constructor_call(name, arguments)
@@ -750,16 +755,6 @@ defmodule RfwFormats.Text do
     |> wrap()
     |> ignore(whitespace)
     |> label("constructor argument")
-
-  defp assemble_constructor_call_args([name | args]) do
-    args =
-      Enum.flat_map(args, fn
-        [key, value] -> [key, value]
-        other -> other
-      end)
-
-    [name | args]
-  end
 
   library =
     ignore(whitespace)
@@ -812,48 +807,6 @@ defmodule RfwFormats.Text do
     |> concat(map)
     |> ignore(whitespace)
   )
-
-  defp parse_unicode_escape(hex) do
-    # Convert hex string to integer, handling both uppercase and lowercase
-    code_point =
-      hex
-      |> String.downcase()
-      |> String.to_integer(16)
-
-    cond do
-      code_point <= 0xD7FF ->
-        <<code_point::utf8>>
-
-      code_point <= 0xFFFF ->
-        <<code_point::16>>
-
-      true ->
-        raise "Invalid code point in Unicode escape sequence: #{hex}"
-    end
-  end
-
-  defmodule Error do
-    defexception [:message, :rest, :line]
-
-    @impl true
-    def message(%{message: message}), do: message
-
-    def exception({message, rest, line}) do
-      %__MODULE__{
-        message: "#{message} at line #{line}",
-        rest: rest,
-        line: line
-      }
-    end
-
-    def exception({message, rest, _context, {line, _}, _}) do
-      %__MODULE__{
-        message: "#{message} at line #{line}",
-        rest: rest,
-        line: line
-      }
-    end
-  end
 
   defp handle_parse_result({:ok, [result], "", _, _, _}, _) do
     result
