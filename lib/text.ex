@@ -42,16 +42,21 @@ defmodule RfwFormats.Text do
     end
   end
 
+  # ... (keep existing code until calculate_debruijn_index function)
+
   defp calculate_debruijn_index(loop_vars, var_name) do
-    Logger.debug("Calculating DeBruijn index for #{var_name} in stack: #{inspect(loop_vars)}")
+    Logger.debug("Calculating DeBruijn index for #{var_name}")
+    Logger.debug("Current loop_vars stack: #{inspect(loop_vars)}")
     # Don't reverse - we already have most recent vars at the front
+    # Most recent vars should have lower indices (0, 1, 2...)
+
     case Enum.find_index(loop_vars, fn var -> var == var_name end) do
       nil ->
         Logger.debug("Variable #{var_name} not found in stack")
         {:error, :variable_not_found}
 
       index ->
-        Logger.debug("Found #{var_name} at index #{index}")
+        Logger.debug("Found #{var_name} at index #{index} in stack #{inspect(loop_vars)}")
         {:ok, index}
     end
   end
@@ -356,9 +361,12 @@ defmodule RfwFormats.Text do
     raw_parts = Keyword.get(parsed, :parts, [])
     parts = List.flatten([raw_parts])
 
-    Logger.debug(
-      "Check loop var: #{var_name}, Parts: #{inspect(parts)}, Location: #{inspect(location)}"
-    )
+    Logger.debug("Check loop var called")
+    Logger.debug("Variable name: #{var_name}")
+    Logger.debug("Raw parts: #{inspect(raw_parts)}")
+    Logger.debug("Flattened parts: #{inspect(parts)}")
+    Logger.debug("Location: #{inspect(location)}")
+    Logger.debug("Current context: #{inspect(context)}")
 
     ctx =
       case context do
@@ -366,22 +374,25 @@ defmodule RfwFormats.Text do
         _ -> Context.new()
       end
 
-    Logger.debug("Current context: #{inspect(ctx)}")
+    Logger.debug("Processed context: #{inspect(ctx)}")
 
     cond do
       # Check if we're in widget builder scope and this is a widget arg
       ctx.scope_type == :widget_builder && var_name in (ctx.widget_args || []) ->
         Logger.debug("Creating WidgetBuilderArgReference for #{var_name}")
-        # Create proper WidgetBuilderArgReference struct instead of raw map
         ref = Model.new_widget_builder_arg_reference(var_name, parts)
+        Logger.debug("Created reference: #{inspect(ref)}")
         {rest, [ref], ctx}
 
       # Try to resolve as loop variable
       true ->
+        Logger.debug("Attempting to resolve as loop variable")
+
         case calculate_debruijn_index(ctx.loop_vars, var_name) do
           {:ok, index} ->
-            Logger.debug("Creating loop reference with index #{index} for #{var_name}")
+            Logger.debug("Creating loop reference with index #{index}")
             loop_ref = Model.new_loop_reference(index, parts)
+            Logger.debug("Created loop reference: #{inspect(loop_ref)}")
             {rest, [loop_ref], ctx}
 
           {:error, :variable_not_found} ->
