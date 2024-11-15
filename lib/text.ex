@@ -4,6 +4,7 @@ defmodule RfwFormats.Text do
   """
 
   import NimbleParsec
+  require Logger
 
   alias RfwFormats.{Model, OrderedMap}
 
@@ -15,21 +16,43 @@ defmodule RfwFormats.Text do
     end
 
     def push_loop_var(%__MODULE__{} = ctx, var_name) do
-      %__MODULE__{ctx | loop_vars: [var_name | ctx.loop_vars]}
+      Logger.debug("Pushing loop var: #{var_name}, Current stack: #{inspect(ctx.loop_vars)}")
+      # Add new loop var to the beginning of the list
+      updated = %__MODULE__{ctx | loop_vars: [var_name | ctx.loop_vars]}
+      Logger.debug("After push: #{inspect(updated.loop_vars)}")
+      updated
     end
 
     def pop_loop_var(%__MODULE__{} = ctx) do
-      case ctx.loop_vars do
-        [_ | rest] -> %__MODULE__{ctx | loop_vars: rest}
-        [] -> ctx
-      end
+      Logger.debug("Before pop: #{inspect(ctx.loop_vars)}")
+
+      result =
+        case ctx.loop_vars do
+          [popped | rest] ->
+            Logger.debug("Popping loop var: #{popped}")
+            %__MODULE__{ctx | loop_vars: rest}
+
+          [] ->
+            Logger.debug("Attempted pop on empty stack")
+            ctx
+        end
+
+      Logger.debug("After pop: #{inspect(result.loop_vars)}")
+      result
     end
   end
 
   defp calculate_debruijn_index(loop_vars, var_name) do
+    Logger.debug("Calculating DeBruijn index for #{var_name} in stack: #{inspect(loop_vars)}")
+    # Don't reverse - we already have most recent vars at the front
     case Enum.find_index(loop_vars, fn var -> var == var_name end) do
-      nil -> {:error, :variable_not_found}
-      index -> {:ok, index}
+      nil ->
+        Logger.debug("Variable #{var_name} not found in stack")
+        {:error, :variable_not_found}
+
+      index ->
+        Logger.debug("Found #{var_name} at index #{index}")
+        {:ok, index}
     end
   end
 
@@ -302,6 +325,7 @@ defmodule RfwFormats.Text do
 
   defp push_loop_var(rest, [loop_var: [var_name]], context, location, _offset) do
     check_reserved_word(var_name, location, rest)
+    Logger.debug("Push loop var called with: #{var_name}, Location: #{inspect(location)}")
 
     ctx =
       case context do
@@ -310,23 +334,31 @@ defmodule RfwFormats.Text do
       end
 
     context = Context.push_loop_var(ctx, var_name)
+    Logger.debug("Context after push: #{inspect(context)}")
     {rest, [loop_var: [var_name]], context}
   end
 
   defp pop_loop_var(rest, args, context, _line, _offset) do
+    Logger.debug("Pop loop var called with context: #{inspect(context)}")
+
     ctx =
       case context do
         %Context{} -> Context.pop_loop_var(context)
         _ -> Context.new()
       end
 
+    Logger.debug("Context after pop: #{inspect(ctx)}")
     {rest, args, ctx}
   end
 
-  defp check_loop_var(rest, parsed, context, _location, _offset) do
+  defp check_loop_var(rest, parsed, context, location, _offset) do
     var_name = Keyword.get(parsed, :var_name)
     raw_parts = Keyword.get(parsed, :parts, [])
     parts = List.flatten([raw_parts])
+
+    Logger.debug(
+      "Check loop var: #{var_name}, Parts: #{inspect(parts)}, Location: #{inspect(location)}"
+    )
 
     ctx =
       case context do
@@ -334,9 +366,12 @@ defmodule RfwFormats.Text do
         _ -> Context.new()
       end
 
+    Logger.debug("Current context: #{inspect(ctx)}")
+
     cond do
       # Check if we're in widget builder scope and this is a widget arg
       ctx.scope_type == :widget_builder && var_name in (ctx.widget_args || []) ->
+        Logger.debug("Creating WidgetBuilderArgReference for #{var_name}")
         # Create proper WidgetBuilderArgReference struct instead of raw map
         ref = Model.new_widget_builder_arg_reference(var_name, parts)
         {rest, [ref], ctx}
@@ -345,16 +380,19 @@ defmodule RfwFormats.Text do
       true ->
         case calculate_debruijn_index(ctx.loop_vars, var_name) do
           {:ok, index} ->
+            Logger.debug("Creating loop reference with index #{index} for #{var_name}")
             loop_ref = Model.new_loop_reference(index, parts)
             {rest, [loop_ref], ctx}
 
           {:error, :variable_not_found} ->
+            Logger.debug("Variable #{var_name} not found in loop vars")
             {rest, [var_name], ctx}
         end
     end
   end
 
   defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, output}]) do
+    Logger.debug("Creating loop with input: #{inspect(input)}, output: #{inspect(output)}")
     # Flatten the input if necessary
     processed_input =
       case input do
@@ -370,6 +408,7 @@ defmodule RfwFormats.Text do
       end
 
     result = Model.new_loop(processed_input, processed_output)
+    Logger.debug("Created loop: #{inspect(result)}")
     result
   end
 
@@ -639,7 +678,9 @@ defmodule RfwFormats.Text do
           %Context{
             context
             | scope_type: :widget_builder,
-              widget_args: [arg_name | context.widget_args || []]
+              widget_args: [arg_name | context.widget_args || []],
+              # Preserve existing loop vars
+              loop_vars: context.loop_vars
           }
 
         _ ->
