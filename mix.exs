@@ -8,20 +8,18 @@ defmodule RfwFormats.MixProject do
     [
       app: :rfw_formats,
       version: @version,
-      elixir: "~> 1.17",
+      elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: description(),
       package: package(),
-      docs: docs(),
-      name: "RfwFormats",
-      source_url: @source_url
+      docs: docs()
     ]
   end
 
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: []
     ]
   end
 
@@ -34,15 +32,12 @@ defmodule RfwFormats.MixProject do
 
   defp description do
     """
-    An Elixir implementation of Flutter's Remote Flutter Widgets (RFW) format parser.
-    Supports both binary and text formats for widget definitions.
+    An Elixir implementation of Flutter's Remote Flutter Widgets (RFW) template parser and binary converter.
     """
   end
 
   defp package do
     [
-      name: "rfw_formats",
-      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md),
       licenses: ["MIT"],
       links: %{
         "GitHub" => @source_url,
@@ -54,7 +49,7 @@ defmodule RfwFormats.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md", "CHANGELOG.md"],
+      extras: ["README.md", "CHANGELOG.md", "LICENCE"],
       source_url: @source_url,
       source_ref: "v#{@version}",
       formatters: ["html"]
