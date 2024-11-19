@@ -393,22 +393,8 @@ defmodule RfwFormats.Text do
     end
   end
 
-  defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, output}]) do
-    processed_input =
-      case input do
-        [inner] -> inner
-        _ -> input
-      end
-
-    processed_output =
-      case output do
-        [inner] -> inner
-        _ -> output
-      end
-
-    result = Model.new_loop(processed_input, processed_output)
-
-    result
+  defp create_loop([{:loop_var, _identifier}, {:input, [input]}, {:output, [output]}]) do
+    Model.new_loop(input, output)
   end
 
   switch =
@@ -805,10 +791,6 @@ defmodule RfwFormats.Text do
 
   defp handle_parse_result({:error, message, rest, context, location, offset}, _) do
     raise Error, {message, rest, context, location, offset}
-  end
-
-  defp handle_parse_result(_, _) do
-    raise Error, {"Unexpected parser result", "", %{}, {1, 0}, 0}
   end
 
   @doc """
