@@ -14,7 +14,7 @@ defmodule ElixirAdvancedWeb.GalleryLive do
     ~H"""
     <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
       <h1 class="text-2xl font-semibold text-gray-900 mb-6">Photo Gallery</h1>
-      <div class="grid grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <%= for image <- @images do %>
           <div class="bg-white rounded-lg shadow-md overflow-hidden">
             <img
