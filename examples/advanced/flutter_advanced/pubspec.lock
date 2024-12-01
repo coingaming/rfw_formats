@@ -67,6 +67,19 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_web_plugins:
+    dependency: transitive
+    description: flutter
+    source: sdk
+    version: "0.0.0"
+  go_router:
+    dependency: "direct main"
+    description:
+      name: go_router
+      sha256: "8660b74171fafae4aa8202100fa2e55349e078281dadc73a241eb8e758534d9d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "14.6.1"
   leak_tracker:
     dependency: transitive
     description:
@@ -99,6 +112,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.0.0"
+  logging:
+    dependency: transitive
+    description:
+      name: logging
+      sha256: c8245ada5f1717ed44271ed1c26b8ce85ca3228fd2ffdb75468ab01979309d61
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.3.0"
   matcher:
     dependency: transitive
     description:
@@ -131,6 +152,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.0"
+  rfw:
+    dependency: "direct main"
+    description:
+      name: rfw
+      sha256: "4a809f714c9bf81ef914886632358a7da7a2bb4b79a8e3da8864d11c44636e1e"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.30"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -196,10 +225,10 @@ packages:
     dependency: transitive
     description:
       name: vm_service
-      sha256: f652077d0bdf60abe4c1f6377448e8655008eef28f128bc023f7b5e8dfeb48fc
+      sha256: "5c5f338a667b4c644744b661f309fb8080bb94b18a7e91ef1dbd343bed00ed6d"
       url: "https://pub.dev"
     source: hosted
-    version: "14.2.4"
+    version: "14.2.5"
 sdks:
-  dart: ">=3.5.0 <4.0.0"
-  flutter: ">=3.18.0-18.0.pre.54"
+  dart: ">=3.5.4 <4.0.0"
+  flutter: ">=3.19.0"
