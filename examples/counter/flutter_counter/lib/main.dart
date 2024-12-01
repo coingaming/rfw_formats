@@ -25,7 +25,7 @@ class CounterPage extends StatefulWidget {
   const CounterPage({super.key});
 
   @override
-  _CounterPageState createState() => _CounterPageState();
+  State<CounterPage> createState() => _CounterPageState();
 }
 
 class _CounterPageState extends State<CounterPage> {
@@ -92,19 +92,16 @@ class _CounterPageState extends State<CounterPage> {
   }
 
   void _joinChannel() {
-    if (_channel == null) {
-      _channel = _socket.addChannel(topic: "counter:lobby")
-        ..join().onReply(
-          "ok",
-          (response) => _updateState(response.response["count"]),
-        )
-        ..messages.listen((Message message) {
-          if (message.payload != null &&
-              message.payload!.containsKey("count")) {
-            _updateState(message.payload!["count"]);
-          }
-        });
-    }
+    _channel ??= _socket.addChannel(topic: "counter:lobby")
+      ..join().onReply(
+        "ok",
+        (response) => _updateState(response.response["count"]),
+      )
+      ..messages.listen((Message message) {
+        if (message.payload != null && message.payload!.containsKey("count")) {
+          _updateState(message.payload!["count"]);
+        }
+      });
   }
 
   void _updateState(dynamic count) {
