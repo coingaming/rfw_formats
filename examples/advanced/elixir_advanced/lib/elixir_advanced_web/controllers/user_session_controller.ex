@@ -36,10 +36,10 @@ defmodule ElixirAdvancedWeb.UserSessionController do
 
   def create_api(conn, %{"email" => email, "password" => password}) do
     if user = Account.get_user_by_email_and_password(email, password) do
-      token = UserAuth.generate_user_token(user)
+      token = Account.create_user_api_token(user)
 
       conn
-      |> put_resp_header("authorization", token)
+      |> put_resp_header("authorization", "Bearer #{token}")
       |> json(%{success: true})
     else
       conn

@@ -18,11 +18,22 @@ defmodule ElixirAdvancedWeb.Router do
     plug :fetch_api_user
   end
 
-  # API routes
+  pipeline :api_public do
+    plug :accepts, ["json"]
+  end
+
+  # Public API routes (login, registration)
+  scope "/api", ElixirAdvancedWeb do
+    pipe_through :api_public
+
+    post "/users/log_in", UserSessionController, :create_api
+  end
+
+  # Protected API routes
   scope "/api", ElixirAdvancedWeb do
     pipe_through :api
 
-    post "/users/log_in", UserSessionController, :create_api
+    # Add protected API routes here
   end
 
   # Public routes (login, registration, etc.)

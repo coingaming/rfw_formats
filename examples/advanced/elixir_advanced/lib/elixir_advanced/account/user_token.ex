@@ -12,6 +12,7 @@ defmodule ElixirAdvanced.Account.UserToken do
   @confirm_validity_in_days 7
   @change_email_validity_in_days 7
   @session_validity_in_days 60
+  @api_token_validity_in_days 365
 
   schema "users_tokens" do
     field :token, :binary
@@ -47,6 +48,21 @@ defmodule ElixirAdvanced.Account.UserToken do
   end
 
   @doc """
+  Builds an API token for user authentication.
+  """
+  def build_api_token(user) do
+    token = :crypto.strong_rand_bytes(@rand_size)
+    hashed_token = :crypto.hash(@hash_algorithm, token)
+
+    {Base.url_encode64(token, padding: false),
+     %UserToken{
+       token: hashed_token,
+       context: "api-token",
+       user_id: user.id
+     }}
+  end
+
+  @doc """
   Checks if the token is valid and returns its underlying lookup query.
 
   The query returns the user found by the token, if any.
@@ -62,6 +78,27 @@ defmodule ElixirAdvanced.Account.UserToken do
         select: user
 
     {:ok, query}
+  end
+
+  @doc """
+  Checks if the API token is valid and returns its underlying lookup query.
+  """
+  def verify_api_token_query(token) do
+    case Base.url_decode64(token, padding: false) do
+      {:ok, decoded_token} ->
+        hashed_token = :crypto.hash(@hash_algorithm, decoded_token)
+
+        query =
+          from token in by_token_and_context_query(hashed_token, "api-token"),
+            join: user in assoc(token, :user),
+            where: token.inserted_at > ago(@api_token_validity_in_days, "day"),
+            select: user
+
+        {:ok, query}
+
+      :error ->
+        :error
+    end
   end
 
   @doc """
@@ -126,7 +163,6 @@ defmodule ElixirAdvanced.Account.UserToken do
     end
   end
 
-  defp days_for_context("api-token"), do: 365
   defp days_for_context("confirm"), do: @confirm_validity_in_days
   defp days_for_context("reset_password"), do: @reset_password_validity_in_days
 

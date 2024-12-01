@@ -242,6 +242,32 @@ defmodule ElixirAdvanced.Account do
     :ok
   end
 
+  ## API Authentication
+
+  @doc """
+  Creates a new api token for a user.
+
+  The token returned must be saved somewhere safe.
+  This token cannot be recovered from the database.
+  """
+  def create_user_api_token(user) do
+    {encoded_token, user_token} = UserToken.build_api_token(user)
+    Repo.insert!(user_token)
+    encoded_token
+  end
+
+  @doc """
+  Fetches the user by API token.
+  """
+  def fetch_user_by_api_token(token) do
+    with {:ok, query} <- UserToken.verify_api_token_query(token),
+         %User{} = user <- Repo.one(query) do
+      {:ok, user}
+    else
+      _ -> :error
+    end
+  end
+
   ## Confirmation
 
   @doc ~S"""
@@ -348,30 +374,6 @@ defmodule ElixirAdvanced.Account do
     |> case do
       {:ok, %{user: user}} -> {:ok, user}
       {:error, :user, changeset, _} -> {:error, changeset}
-    end
-  end
-
-  @doc """
-  Creates a new api token for a user.
-
-  The token returned must be saved somewhere safe.
-  This token cannot be recovered from the database.
-  """
-  def create_user_api_token(user) do
-    {encoded_token, user_token} = UserToken.build_email_token(user, "api-token")
-    Repo.insert!(user_token)
-    encoded_token
-  end
-
-  @doc """
-  Fetches the user by API token.
-  """
-  def fetch_user_by_api_token(token) do
-    with {:ok, query} <- UserToken.verify_email_token_query(token, "api-token"),
-         %User{} = user <- Repo.one(query) do
-      {:ok, user}
-    else
-      _ -> :error
     end
   end
 end

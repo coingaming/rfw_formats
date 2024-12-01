@@ -20,8 +20,6 @@ class AuthService {
         }),
       );
 
-      print(response.body);
-
       if (response.statusCode == 200) {
         final token = response.headers["authorization"];
         if (token != null) {
