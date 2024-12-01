@@ -9,7 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_secure_storage: ^9.2.2
   go_router: ^14.6.1
+  http: ^1.2.2
+  phoenix_socket: ^0.7.6
   rfw: ^1.0.30
 
 dev_dependencies:

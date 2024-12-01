@@ -34,6 +34,20 @@ defmodule ElixirAdvancedWeb.UserSessionController do
     end
   end
 
+  def create_api(conn, %{"email" => email, "password" => password}) do
+    if user = Account.get_user_by_email_and_password(email, password) do
+      token = UserAuth.generate_user_token(user)
+
+      conn
+      |> put_resp_header("authorization", token)
+      |> json(%{success: true})
+    else
+      conn
+      |> put_status(:unauthorized)
+      |> json(%{success: false, message: "Invalid email or password"})
+    end
+  end
+
   def delete(conn, _params) do
     conn
     |> put_flash(:info, "Logged out successfully.")

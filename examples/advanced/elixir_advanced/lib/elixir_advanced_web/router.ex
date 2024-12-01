@@ -15,6 +15,14 @@ defmodule ElixirAdvancedWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug :fetch_api_user
+  end
+
+  # API routes
+  scope "/api", ElixirAdvancedWeb do
+    pipe_through :api
+
+    post "/users/log_in", UserSessionController, :create_api
   end
 
   # Public routes (login, registration, etc.)

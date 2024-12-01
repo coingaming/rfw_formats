@@ -13,6 +13,24 @@ defmodule ElixirAdvancedWeb.UserAuth do
   @remember_me_cookie "_elixir_advanced_web_user_remember_me"
   @remember_me_options [sign: true, max_age: @max_age, same_site: "Lax"]
 
+  def generate_user_token(user) do
+    token = Account.create_user_api_token(user)
+    "Bearer #{token}"
+  end
+
+  def fetch_api_user(conn, _opts) do
+    with ["Bearer " <> token] <- get_req_header(conn, "authorization"),
+         {:ok, user} <- Account.fetch_user_by_api_token(token) do
+      assign(conn, :current_user, user)
+    else
+      _ ->
+        conn
+        |> put_status(:unauthorized)
+        |> json(%{error: "Unauthorized"})
+        |> halt()
+    end
+  end
+
   @doc """
   Logs the user in.
 
