@@ -16,7 +16,10 @@ defmodule ElixirAdvancedWeb.GalleryLive do
       <h1 class="text-2xl font-semibold text-gray-900 mb-6">Photo Gallery</h1>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <%= for image <- @images do %>
-          <div class="bg-white rounded-lg shadow-md overflow-hidden">
+          <.link
+            navigate={~p"/gallery/#{image.id}"}
+            class="bg-white rounded-lg shadow-md overflow-hidden transform transition duration-300 hover:scale-105 hover:shadow-xl"
+          >
             <img
               src={image.src}
               alt={image.title}
@@ -24,8 +27,9 @@ defmodule ElixirAdvancedWeb.GalleryLive do
             />
             <div class="p-4">
               <h3 class="text-lg font-medium text-gray-900"><%= image.title %></h3>
+              <p class="text-sm text-gray-500 mt-1">Click to view details</p>
             </div>
-          </div>
+          </.link>
         <% end %>
       </div>
     </div>

@@ -60,6 +60,7 @@ defmodule ElixirAdvancedWeb.Router do
       on_mount: [{ElixirAdvancedWeb.UserAuth, :ensure_authenticated}] do
       live "/todos", TodosLive, :index
       live "/gallery", GalleryLive, :index
+      live "/gallery/:id", PhotoLive, :show
       live "/users/settings", UserSettingsLive, :edit
       live "/users/settings/confirm_email/:token", UserSettingsLive, :confirm_email
     end
