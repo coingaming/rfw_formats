@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_advanced/src/gallery_page.dart';
-import 'package:flutter_advanced/src/login_page.dart';
-import 'package:flutter_advanced/src/scaffold_with_navbar.dart';
+import 'package:flutter_advanced/src/ui/gallery_page.dart';
+import 'package:flutter_advanced/src/ui/login_page.dart';
+import 'package:flutter_advanced/src/ui/scaffold_with_navbar.dart';
 import 'package:flutter_advanced/src/services/auth_service.dart';
-import 'package:flutter_advanced/src/settings_page.dart';
-import 'package:flutter_advanced/src/todo_page.dart';
+import 'package:flutter_advanced/src/ui/settings_page.dart';
+import 'package:flutter_advanced/src/ui/todo_page.dart';
 import 'package:go_router/go_router.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: "root");

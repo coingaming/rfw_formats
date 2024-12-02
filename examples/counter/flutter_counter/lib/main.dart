@@ -80,7 +80,7 @@ class _CounterPageState extends State<CounterPage> {
         throw Exception("Failed to fetch remote widgets");
       }
     } catch (e) {
-      print(e);
+      return;
     }
   }
 
