@@ -3,14 +3,20 @@ import 'package:flutter_advanced/src/ui/gallery_page.dart';
 import 'package:flutter_advanced/src/ui/login_page.dart';
 import 'package:flutter_advanced/src/ui/scaffold_with_navbar.dart';
 import 'package:flutter_advanced/src/services/auth_service.dart';
+import 'package:flutter_advanced/src/services/rfw_service.dart';
 import 'package:flutter_advanced/src/ui/settings_page.dart';
 import 'package:flutter_advanced/src/ui/todo_page.dart';
 import 'package:go_router/go_router.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: "root");
-final _authService = AuthService();
 
-void main() {
+final _authService = AuthService();
+final _rfwService = RfwService();
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await _rfwService.initialize();
+
   runApp(MainApp());
 }
 
@@ -74,6 +80,7 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print("rfw cache: ${_rfwService.templatesCache}");
     return MaterialApp.router(
       title: "Advanced RFW Example",
       theme: ThemeData(

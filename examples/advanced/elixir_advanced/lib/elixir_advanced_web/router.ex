@@ -19,21 +19,20 @@ defmodule ElixirAdvancedWeb.Router do
   end
 
   pipeline :api_public do
-    plug :accepts, ["json"]
+    plug :accepts, ["json", "bin"]
   end
 
-  # Public API routes (login, registration)
+  # Public API routes (login, registration, rfw-templates, etc.)
   scope "/api", ElixirAdvancedWeb do
     pipe_through :api_public
 
     post "/users/log_in", UserSessionController, :create_api
+    get "/rfw-templates", RfwTemplatesController, :widget_template
   end
 
   # Protected API routes
   scope "/api", ElixirAdvancedWeb do
     pipe_through :api
-
-    # Add protected API routes here
   end
 
   # Public routes (login, registration, etc.)

@@ -98,7 +98,7 @@ defmodule Counter.Controller do
                           onPressed: event "decrement" {},
                           child: Icon(
                             icon: 0xe516,
-                            fontFamily: 'MaterialIcons',
+                            fontFamily: "MaterialIcons",
                           ),
                         ),
                         SizedBox(width: 8.0),
@@ -106,7 +106,7 @@ defmodule Counter.Controller do
                           onPressed: event "increment" {},
                           child: Icon(
                             icon: 0xe047,
-                            fontFamily: 'MaterialIcons',
+                            fontFamily: "MaterialIcons",
                           ),
                         ),
                       ],
