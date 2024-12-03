@@ -1,0 +1,43 @@
+import widgets;
+import material;
+
+widget root = Scaffold(
+  appBar: AppBar(
+    title: Text(text: "Counter Example"),
+    centerTitle: true,
+    backgroundColor: 0xFF7B68EE,
+  ),
+  body: Center(
+    child: Column(
+      mainAxisAlignment: "center",
+      children: [
+        Text(text: ["Counter: ", data.state],
+          style: {
+            fontSize: 20.0,
+          },
+        ),
+        SizedBox(height: 16.0),
+        Row(
+          mainAxisAlignment: "center",
+          children: [
+            ElevatedButton(
+              onPressed: event "decrement" {},
+              child: Icon(
+                icon: 0xe516,
+                fontFamily: 'MaterialIcons',
+              ),
+            ),
+            SizedBox(width: 8.0),
+            ElevatedButton(
+              onPressed: event "increment" {},
+              child: Icon(
+                icon: 0xe047,
+                fontFamily: 'MaterialIcons',
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  ),
+);

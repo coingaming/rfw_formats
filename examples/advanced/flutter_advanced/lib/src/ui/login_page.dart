@@ -43,7 +43,8 @@ class _LoginPageState extends State<LoginPage> {
       });
 
       if (success && mounted) {
-        context.go("/todos");
+        // Let the router handle redirection to the first shell route
+        context.go(LoginPage.path);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -78,6 +79,8 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 32),
                 TextFormField(
                   controller: _emailController,
+                  textCapitalization: TextCapitalization.none,
+                  autocorrect: false,
                   decoration: const InputDecoration(
                     labelText: "Email",
                     border: OutlineInputBorder(),

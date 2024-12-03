@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
@@ -29,15 +28,15 @@ class ApiClient {
     }
   }
 
-  static Future<Uint8List?> fetchRfwTemplates() async {
+  static Future<List<dynamic>?> fetchRfwTemplates() async {
     try {
       final response = await http.get(
         Uri.parse("$_baseUrl/api/rfw-templates"),
-        headers: {"Accept": "application/octet-stream"},
+        headers: {"Accept": "application/json"},
       );
 
       if (response.statusCode == 200) {
-        return response.bodyBytes;
+        return json.decode(response.body);
       }
       return null;
     } catch (e) {

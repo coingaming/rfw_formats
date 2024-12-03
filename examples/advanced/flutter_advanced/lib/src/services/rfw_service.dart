@@ -1,31 +1,43 @@
-import 'dart:convert';
+import 'dart:developer';
 import 'dart:typed_data';
 import 'package:flutter_advanced/src/services/api_client.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:sembast/sembast_io.dart';
+import 'package:sembast/blob.dart';
 
-/// Service for managing Remote Flutter Widget (RFW) templates
-///
-/// This service handles:
-/// - Fetching templates from the API
-/// - Storing templates in secure storage
-/// - Caching templates in memory
-/// - Retrieving templates from cache or storage
 class RfwService {
-  static const _storage = FlutterSecureStorage();
-  static const String _counterTemplateKey = "rfw_template_counter";
+  static const String _dbName = "rfw_templates.db";
 
-  final Map<String, Uint8List> templatesCache = {};
+  late Database _db;
+  late final StoreRef<String, dynamic> _store =
+      StoreRef<String, dynamic>.main();
 
   Future<void> initialize() async {
     try {
-      /* final hasStoredTemplates = await hasTemplates();
-      if (!hasStoredTemplates) { */
+      await _openDatabase();
       await fetchAndStoreTemplates();
-      /* } else {
-        await getTemplates();
-      } */
     } catch (e) {
-      print("Failed to initialize RfwService: $e");
+      throw Exception("Failed to initialize RFW service: $e");
+    }
+  }
+
+  Future<void> _openDatabase() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final dbPath = "${appDir.path}/$_dbName";
+    _db = await databaseFactoryIo.openDatabase(dbPath);
+  }
+
+  Future<void> _processTemplates(List<dynamic> templates) async {
+    for (var template in templates) {
+      // Store the main template
+      if (template["path"] != null && template["template"] != null) {
+        await _storeTemplate(template["path"], template["template"]);
+      }
+
+      // Process nested routes if they exist
+      if (template["routes"] != null) {
+        await _processTemplates(template["routes"]);
+      }
     }
   }
 
@@ -33,10 +45,9 @@ class RfwService {
     try {
       final templates = await ApiClient.fetchRfwTemplates();
       if (templates != null) {
-        // Convert Uint8List to base64 for storage
-        final base64Templates = base64Encode(templates);
-        await _storage.write(key: _counterTemplateKey, value: base64Templates);
-        templatesCache[_counterTemplateKey] = templates;
+        final routingConfig = _removeTemplatesFromData(templates);
+        await _storeRoutingConfiguration(routingConfig);
+        await _processTemplates(templates);
       } else {
         throw Exception("Failed to fetch RFW templates: API returned null");
       }
@@ -45,44 +56,97 @@ class RfwService {
     }
   }
 
-  Future<Uint8List?> getTemplates() async {
+  List<dynamic> _removeTemplatesFromData(List<dynamic> data) {
+    return data.map((item) {
+      Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
+      newItem.remove("template");
+      if (newItem.containsKey("routes")) {
+        newItem["routes"] =
+            _removeTemplatesFromData(List<dynamic>.from(newItem["routes"]));
+      }
+      return newItem;
+    }).toList();
+  }
+
+  Future<void> _storeRoutingConfiguration(dynamic routingConfig) async {
     try {
-      if (templatesCache.containsKey(_counterTemplateKey)) {
-        return templatesCache[_counterTemplateKey];
-      }
+      await _store.record("routing_configuration").put(_db, routingConfig);
+    } catch (e) {
+      throw Exception("Failed to store routing configuration: $e");
+    }
+  }
 
-      final storedTemplates = await _storage.read(key: _counterTemplateKey);
-      if (storedTemplates != null) {
-        try {
-          final templates = Uint8List.fromList(base64Decode(storedTemplates));
-          templatesCache[_counterTemplateKey] = templates;
-          return templates;
-        } catch (e) {
-          await clearTemplates();
-          return null;
-        }
-      }
+  Future<void> _storeTemplate(String path, String base64Template) async {
+    try {
+      final blobTemplate = Blob.fromBase64(base64Template);
+      await _store.record(path).put(_db, blobTemplate);
+    } catch (e) {
+      throw Exception("Failed to store template for path $path: $e");
+    }
+  }
 
+  Future<Uint8List?> getTemplate(String path) async {
+    try {
+      final blobTemplate = await _store.record(path).get(_db) as Blob?;
+      if (blobTemplate != null) {
+        return blobTemplate.bytes;
+      }
       return null;
     } catch (e) {
       return null;
     }
   }
 
+  Future<dynamic> getRoutingConfiguration() async {
+    try {
+      return await _store.record("routing_configuration").get(_db);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Map<String, Uint8List>> getAllTemplates() async {
+    try {
+      final records = await _store.find(_db);
+      log(records.toString());
+      return Map.fromEntries(
+        records
+            .where((record) => record.key != "routing_configuration")
+            .map((record) {
+          final blob = record.value as Blob?;
+          if (blob != null) {
+            return MapEntry(
+              record.key.toString(),
+              blob.bytes,
+            );
+          } else {
+            return MapEntry(record.key.toString(), Uint8List(0));
+          }
+        }),
+      );
+    } catch (e) {
+      return {};
+    }
+  }
+
   Future<void> clearTemplates() async {
     try {
-      await _storage.delete(key: _counterTemplateKey);
-      templatesCache.clear();
+      await _store.delete(_db);
     } catch (e) {
       throw Exception("Failed to clear templates: $e");
     }
   }
 
   Future<bool> hasTemplates() async {
-    if (templatesCache.containsKey(_counterTemplateKey)) {
-      return true;
+    try {
+      final count = await _store.count(_db);
+      return count > 0;
+    } catch (e) {
+      return false;
     }
-    final storedTemplates = await _storage.read(key: _counterTemplateKey);
-    return storedTemplates != null;
+  }
+
+  Future<void> close() async {
+    await _db.close();
   }
 }

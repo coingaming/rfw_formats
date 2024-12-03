@@ -1,0 +1,64 @@
+import widgets;
+import material;
+
+widget root = Scaffold(
+  appBar: AppBar(
+    title: Text(text: "Counter 2 Example"),
+    centerTitle: true,
+    backgroundColor: 0xFF6200EE,
+  ),
+  body: Container(
+    padding: [16.0, 16.0, 16.0, 16.0],
+    child: Column(
+      mainAxisAlignment: "center",
+      children: [
+        Card(
+          child: Padding(
+            padding: [16.0, 16.0, 16.0, 16.0],
+            child: Column(
+              children: [
+                Text(
+                  text: "Current Count",
+                  style: {
+                    fontSize: 24.0,
+                    fontWeight: "bold",
+                  },
+                ),
+                SizedBox(height: 8.0),
+                Text(
+                  text: data.state,
+                  style: {
+                    fontSize: 48.0,
+                    color: 0xFF6200EE,
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 24.0),
+        Row(
+          mainAxisAlignment: "spaceEvenly",
+          children: [
+            FloatingActionButton(
+              onPressed: event "decrement" {},
+              backgroundColor: 0xFF6200EE,
+              child: Icon(
+                icon: 0xe516,
+                fontFamily: 'MaterialIcons',
+              ),
+            ),
+            FloatingActionButton(
+              onPressed: event "increment" {},
+              backgroundColor: 0xFF6200EE,
+              child: Icon(
+                icon: 0xe047,
+                fontFamily: 'MaterialIcons',
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  ),
+);

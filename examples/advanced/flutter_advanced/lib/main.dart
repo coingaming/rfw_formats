@@ -1,92 +1,55 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
-import 'package:flutter_advanced/src/ui/gallery_page.dart';
-import 'package:flutter_advanced/src/ui/login_page.dart';
-import 'package:flutter_advanced/src/ui/scaffold_with_navbar.dart';
 import 'package:flutter_advanced/src/services/auth_service.dart';
 import 'package:flutter_advanced/src/services/rfw_service.dart';
-import 'package:flutter_advanced/src/ui/settings_page.dart';
-import 'package:flutter_advanced/src/ui/todo_page.dart';
-import 'package:go_router/go_router.dart';
-
-final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: "root");
+import 'package:flutter_advanced/src/router.dart';
+import 'package:sembast/sembast_io.dart';
 
 final _authService = AuthService();
 final _rfwService = RfwService();
+final _appRouter = AppRouter(_authService);
+
+List<Map<String, dynamic>> _convertConfig(List<dynamic> config) {
+  return config.map((dynamic item) {
+    final map = Map<String, dynamic>.from(item as Map);
+    if (map['routes'] != null) {
+      map['routes'] = _convertConfig(map['routes'] as List<dynamic>);
+    }
+    return map;
+  }).toList();
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  disableSembastCooperator();
   await _rfwService.initialize();
+  enableSembastCooperator();
+  //await _rfwService.clearTemplates();
 
-  runApp(MainApp());
+  // Get and apply dynamic routing configuration
+  final routingConfig = await _rfwService.getRoutingConfiguration();
+  if (routingConfig != null) {
+    log("yeee");
+    // Convert configuration with proper type handling
+    final convertedConfig = _convertConfig(routingConfig);
+    _appRouter.mergeRoutingConfiguration(convertedConfig);
+  }
+
+  runApp(const MainApp());
 }
 
 class MainApp extends StatelessWidget {
-  MainApp({super.key});
-
-  final _router = GoRouter(
-    navigatorKey: _rootNavigatorKey,
-    initialLocation: TodosPage.path,
-    redirect: (context, state) async {
-      final isAuthenticated = await _authService.isAuthenticated();
-      final isLoginRoute = state.matchedLocation == LoginPage.path;
-
-      if (!isAuthenticated && !isLoginRoute) {
-        return LoginPage.path;
-      }
-
-      if (isAuthenticated && isLoginRoute) {
-        return TodosPage.path;
-      }
-
-      return null;
-    },
-    routes: [
-      GoRoute(
-        path: LoginPage.path,
-        builder: (context, state) => const LoginPage(),
-      ),
-      StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) =>
-            ScaffoldWithNavBar(navigationShell: navigationShell),
-        branches: [
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: TodosPage.path,
-                builder: (context, state) => const TodosPage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: GalleryPage.path,
-                builder: (context, state) => const GalleryPage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: SettingsPage.path,
-                builder: (context, state) => const SettingsPage(),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ],
-  );
+  const MainApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    print("rfw cache: ${_rfwService.templatesCache}");
     return MaterialApp.router(
       title: "Advanced RFW Example",
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      routerConfig: _router,
+      routerConfig: _appRouter.router,
     );
   }
 }
