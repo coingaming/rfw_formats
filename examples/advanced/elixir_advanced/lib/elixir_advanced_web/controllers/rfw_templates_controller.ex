@@ -10,7 +10,7 @@ defmodule ElixirAdvancedWeb.RfwTemplatesController do
     "rfw_templates"
   ])
 
-  @template_names ["counter", "counter2"]
+  @template_names ["gallery", "details"]
 
   @templates Map.new(@template_names, fn name ->
     template_content =
@@ -27,16 +27,16 @@ defmodule ElixirAdvancedWeb.RfwTemplatesController do
   def widget_templates(conn, _params) do
     templates = [
       %{
-        "path" => "/counter",
+        "path" => "/gallery",
         "isShellRoute" => true,
         "label" => "Gallery",
         "iconHex" => "0xe332",
         "fontFamily" => "MaterialIcons",
-        "template" => @templates["counter"],
+        "template" => @templates["gallery"],
         "routes" => [
           %{
-            "path" => "/counter/counter2",
-            "template" => @templates["counter2"]
+            "path" => "/gallery/details",
+            "template" => @templates["details"]
           }
         ]
       }

@@ -8,7 +8,7 @@ import 'package:sembast/sembast_io.dart';
 
 final _authService = AuthService();
 final _rfwService = RfwService();
-final _appRouter = AppRouter(_authService);
+late final AppRouter _appRouter;
 
 List<Map<String, dynamic>> _convertConfig(List<dynamic> config) {
   return config.map((dynamic item) {
@@ -22,10 +22,18 @@ List<Map<String, dynamic>> _convertConfig(List<dynamic> config) {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize RFW service first
   disableSembastCooperator();
   await _rfwService.initialize();
   enableSembastCooperator();
   //await _rfwService.clearTemplates();
+
+  // Create AppRouter after RFW service is initialized
+  _appRouter = AppRouter(
+    authService: _authService,
+    rfwService: _rfwService,
+  );
 
   // Get and apply dynamic routing configuration
   final routingConfig = await _rfwService.getRoutingConfiguration();

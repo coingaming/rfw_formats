@@ -2,11 +2,6 @@ import widgets;
 import material;
 
 widget root = Scaffold(
-  appBar: AppBar(
-    title: Text(text: "Counter Example"),
-    centerTitle: true,
-    backgroundColor: 0xFF7B68EE,
-  ),
   body: Center(
     child: Column(
       mainAxisAlignment: "center",

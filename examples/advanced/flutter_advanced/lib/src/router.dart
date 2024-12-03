@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_advanced/src/services/rfw_service.dart';
+import 'package:flutter_advanced/src/ui/rfw_screen.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_advanced/src/ui/gallery_page.dart';
 import 'package:flutter_advanced/src/ui/login_page.dart';
 import 'package:flutter_advanced/src/ui/scaffold_with_navbar.dart';
 import 'package:flutter_advanced/src/ui/settings_page.dart';
@@ -8,11 +9,15 @@ import 'package:flutter_advanced/src/services/auth_service.dart';
 
 class AppRouter {
   static final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: "root");
-  final AuthService _authService;
+  final AuthService authService;
+  final RfwService rfwService;
   List<RouteBase> _currentRoutes = [];
   List<Map<String, dynamic>> _routeConfigs = [];
 
-  AppRouter(this._authService) {
+  AppRouter({
+    required this.authService,
+    required this.rfwService,
+  }) {
     _currentRoutes = _initialRoutes;
   }
 
@@ -48,7 +53,7 @@ class AppRouter {
 
   Future<String?> _handleRedirect(
       BuildContext context, GoRouterState state) async {
-    final isAuthenticated = await _authService.isAuthenticated();
+    final isAuthenticated = await authService.isAuthenticated();
     final isLoginRoute = state.matchedLocation == LoginPage.path;
 
     if (!isAuthenticated && !isLoginRoute) {
@@ -120,13 +125,25 @@ class AppRouter {
   }
 
   Widget _buildPage(String path) {
-    if (path == '/counter') {
-      return const GalleryPage();
-    }
-    return Placeholder(
-      child: Center(
-        child: Text('Page for path: $path'),
-      ),
+    return FutureBuilder(
+      future: rfwService.getTemplate(path),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError || !snapshot.hasData) {
+          return Center(
+            child: Text(
+                'Error loading template: ${snapshot.error ?? 'Template not found'}'),
+          );
+        }
+
+        return RfwScreen(
+          name: "root",
+          library: snapshot.data!,
+        );
+      },
     );
   }
 
